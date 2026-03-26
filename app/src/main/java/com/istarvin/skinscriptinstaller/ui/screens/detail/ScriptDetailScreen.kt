@@ -26,6 +26,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -35,7 +36,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -44,13 +44,13 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,10 +89,14 @@ fun ScriptDetailScreen(
     val skinsForSelectedHero by viewModel.skinsForSelectedHero.collectAsState()
     val suggestedHeroName by viewModel.suggestedHeroName.collectAsState()
 
-    var showClassifySheet by remember { mutableStateOf(false) }
+    var showClassifyDialog by rememberSaveable { mutableStateOf(false) }
+    var pendingAutoClassify by rememberSaveable(autoClassify) { mutableStateOf(autoClassify) }
 
-    LaunchedEffect(autoClassify) {
-        if (autoClassify) showClassifySheet = true
+    LaunchedEffect(pendingAutoClassify) {
+        if (pendingAutoClassify) {
+            showClassifyDialog = true
+            pendingAutoClassify = false
+        }
     }
 
     LaunchedEffect(error) {
@@ -132,9 +136,9 @@ fun ScriptDetailScreen(
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (isInstalled) 
-                                MaterialTheme.colorScheme.primaryContainer 
-                            else 
+                            containerColor = if (isInstalled)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else
                                 MaterialTheme.colorScheme.surfaceVariant
                         ),
                         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -143,32 +147,32 @@ fun ScriptDetailScreen(
                             Text(
                                 text = s.name,
                                 style = MaterialTheme.typography.headlineMedium,
-                                color = if (isInstalled) 
-                                    MaterialTheme.colorScheme.onPrimaryContainer 
-                                else 
+                                color = if (isInstalled)
+                                    MaterialTheme.colorScheme.onPrimaryContainer
+                                else
                                     MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(12.dp))
                             Text(
                                 text = "Imported: ${formatDate(s.importedAt)}",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = if (isInstalled) 
+                                color = if (isInstalled)
                                     MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                                else 
+                                else
                                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "User scope: User $selectedUserId",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = if (isInstalled) 
+                                color = if (isInstalled)
                                     MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
-                                else 
+                                else
                                     MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
                             installation?.let { inst ->
                                 Spacer(modifier = Modifier.height(12.dp))
-                                
+
                                 Card(
                                     colors = CardDefaults.cardColors(
                                         containerColor = if (inst.status == "installed")
@@ -180,7 +184,10 @@ fun ScriptDetailScreen(
                                 ) {
                                     Text(
                                         text = inst.status.uppercase(),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier.padding(
+                                            horizontal = 8.dp,
+                                            vertical = 4.dp
+                                        ),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = if (inst.status == "installed")
                                             MaterialTheme.colorScheme.onPrimary
@@ -188,13 +195,15 @@ fun ScriptDetailScreen(
                                             MaterialTheme.colorScheme.onTertiary
                                     )
                                 }
-                                
+
                                 if (inst.status == "installed") {
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
                                         text = "Installed: ${formatDate(inst.installedAt)}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(
+                                            alpha = 0.8f
+                                        )
                                     )
                                 }
                                 inst.restoredAt?.let { restoredAt ->
@@ -202,7 +211,9 @@ fun ScriptDetailScreen(
                                     Text(
                                         text = "Restored: ${formatDate(restoredAt)}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                            alpha = 0.8f
+                                        )
                                     )
                                 }
                             }
@@ -217,7 +228,7 @@ fun ScriptDetailScreen(
                     heroName = heroName,
                     originalSkinName = originalSkinName,
                     replacementSkinName = replacementSkinName,
-                    onEditClick = { showClassifySheet = true },
+                    onEditClick = { showClassifyDialog = true },
                     onClearClick = { viewModel.clearClassification() }
                 )
             }
@@ -225,9 +236,10 @@ fun ScriptDetailScreen(
             // Action buttons
             item {
                 val isInstalled = installation?.status == "installed"
-                val canPrimaryAction = !isOperating && isShizukuReady && eligibleUserIds.isNotEmpty()
+                val canPrimaryAction =
+                    !isOperating && isShizukuReady && eligibleUserIds.isNotEmpty()
                 val canRestore = !isOperating && isShizukuReady &&
-                    installation?.status == "installed"
+                        installation?.status == "installed"
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -297,7 +309,9 @@ fun ScriptDetailScreen(
                     Column(modifier = Modifier.fillMaxWidth()) {
                         LinearProgressIndicator(
                             progress = {
-                                activeProgress.currentIndex.toFloat() / activeProgress.total.coerceAtLeast(1)
+                                activeProgress.currentIndex.toFloat() / activeProgress.total.coerceAtLeast(
+                                    1
+                                )
                             },
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -334,11 +348,11 @@ fun ScriptDetailScreen(
                         node.id in expandedDirectoryIds -> Icons.Default.FolderOpen
                         else -> Icons.Default.Folder
                     }
-                    val iconTint = if (node.isDirectory) 
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f) 
-                    else 
+                    val iconTint = if (node.isDirectory)
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    else
                         MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    
+
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
@@ -358,9 +372,8 @@ fun ScriptDetailScreen(
             item { Spacer(modifier = Modifier.height(16.dp)) }
         }
 
-        // Classify bottom sheet
-        if (showClassifySheet) {
-            ClassifyBottomSheet(
+        if (showClassifyDialog) {
+            ClassifyScriptDialog(
                 currentHeroName = heroName,
                 currentOriginalSkinName = originalSkinName,
                 currentReplacementSkinName = replacementSkinName,
@@ -370,9 +383,9 @@ fun ScriptDetailScreen(
                 onHeroNameChanged = { viewModel.loadSkinsForHeroName(it) },
                 onConfirm = { hero, original, replacement ->
                     viewModel.classifyScript(hero, original, replacement)
-                    showClassifySheet = false
+                    showClassifyDialog = false
                 },
-                onDismiss = { showClassifySheet = false }
+                onDismiss = { showClassifyDialog = false }
             )
         }
     }
@@ -455,7 +468,7 @@ private fun ClassificationCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ClassifyBottomSheet(
+private fun ClassifyScriptDialog(
     currentHeroName: String?,
     currentOriginalSkinName: String?,
     currentReplacementSkinName: String?,
@@ -466,16 +479,26 @@ private fun ClassifyBottomSheet(
     onConfirm: (heroName: String, originalSkinName: String, replacementSkinName: String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
     var heroText by remember { mutableStateOf(currentHeroName ?: suggestedHeroName ?: "") }
-    val wasAutoDetected = remember { currentHeroName == null && suggestedHeroName != null }
+    var heroInputTouched by remember { mutableStateOf(false) }
+    val wasSuggested = currentHeroName == null && suggestedHeroName != null
     var originalSkinText by remember { mutableStateOf(currentOriginalSkinName ?: "") }
     var replacementSkinText by remember { mutableStateOf(currentReplacementSkinName ?: "") }
 
     var heroExpanded by remember { mutableStateOf(false) }
     var originalSkinExpanded by remember { mutableStateOf(false) }
     var replacementSkinExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(currentHeroName, suggestedHeroName) {
+        if (
+            !heroInputTouched &&
+            currentHeroName.isNullOrBlank() &&
+            heroText.isBlank() &&
+            !suggestedHeroName.isNullOrBlank()
+        ) {
+            heroText = suggestedHeroName
+        }
+    }
 
     // Load skins when hero text changes
     LaunchedEffect(heroText) {
@@ -505,7 +528,12 @@ private fun ClassifyBottomSheet(
 
     val filteredReplacementSkins = remember(replacementSkinText, replacementCandidateSkins) {
         if (replacementSkinText.isBlank()) replacementCandidateSkins
-        else replacementCandidateSkins.filter { it.name.contains(replacementSkinText, ignoreCase = true) }
+        else replacementCandidateSkins.filter {
+            it.name.contains(
+                replacementSkinText,
+                ignoreCase = true
+            )
+        }
     }
 
     val canConfirm = heroText.isNotBlank() &&
@@ -513,182 +541,187 @@ private fun ClassifyBottomSheet(
             replacementSkinText.isNotBlank() &&
             !originalSkinText.trim().equals(replacementSkinText.trim(), ignoreCase = true)
 
-    ModalBottomSheet(
+    AlertDialog(
         onDismissRequest = onDismiss,
-        sheetState = sheetState
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        title = {
             Text(
                 text = "Classify Script",
                 style = MaterialTheme.typography.titleLarge
             )
-            Text(
-                text = "Assign a hero and skin information to this script",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            // Hero field
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            ExposedDropdownMenuBox(
-                expanded = heroExpanded && filteredHeroes.isNotEmpty(),
-                onExpandedChange = { heroExpanded = it }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                OutlinedTextField(
-                    value = heroText,
-                    onValueChange = {
-                        heroText = it
-                        heroExpanded = true
-                    },
-                    label = { Text("Hero") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-                    singleLine = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = heroExpanded) }
-                )
-                ExposedDropdownMenu(
-                    expanded = heroExpanded && filteredHeroes.isNotEmpty(),
-                    onDismissRequest = { heroExpanded = false }
-                ) {
-                    filteredHeroes.forEach { hero ->
-                        DropdownMenuItem(
-                            text = {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Box(modifier = Modifier.size(32.dp)) {
-                                        Icon(
-                                            imageVector = Icons.Default.Person,
-                                            contentDescription = null,
-                                            modifier = Modifier.fillMaxSize(),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        AsyncImage(
-                                            model = hero.heroIcon,
-                                            contentDescription = null,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    }
-                                    Text(hero.name)
-                                }
-                            },
-                            onClick = {
-                                heroText = hero.name
-                                heroExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
-            if (wasAutoDetected && heroText == suggestedHeroName) {
                 Text(
-                    text = "Auto-detected from script name",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    text = "Assign a hero and skin information to this script",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-            } // end hero Column
 
-            // Original Skin field
-            ExposedDropdownMenuBox(
-                expanded = originalSkinExpanded && filteredOriginalSkins.isNotEmpty(),
-                onExpandedChange = { originalSkinExpanded = it }
-            ) {
-                OutlinedTextField(
-                    value = originalSkinText,
-                    onValueChange = {
-                        originalSkinText = it
-                        if (replacementSkinText.equals(it.trim(), ignoreCase = true)) {
-                            replacementSkinText = ""
+                // Hero field
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ExposedDropdownMenuBox(
+                        expanded = heroExpanded && filteredHeroes.isNotEmpty(),
+                        onExpandedChange = { heroExpanded = it }
+                    ) {
+                        OutlinedTextField(
+                            value = heroText,
+                            onValueChange = {
+                                heroText = it
+                                heroInputTouched = true
+                                heroExpanded = true
+                            },
+                            label = { Text("Hero") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+                            singleLine = true,
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = heroExpanded) }
+                        )
+                        ExposedDropdownMenu(
+                            expanded = heroExpanded && filteredHeroes.isNotEmpty(),
+                            onDismissRequest = { heroExpanded = false }
+                        ) {
+                            filteredHeroes.forEach { hero ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Box(modifier = Modifier.size(32.dp)) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Person,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                AsyncImage(
+                                                    model = hero.heroIcon,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+                                            Text(hero.name)
+                                        }
+                                    },
+                                    onClick = {
+                                        heroText = hero.name
+                                        heroInputTouched = true
+                                        heroExpanded = false
+                                    }
+                                )
+                            }
                         }
-                        originalSkinExpanded = true
-                    },
-                    label = { Text("Original Skin (being replaced)") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-                    singleLine = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = originalSkinExpanded) }
-                )
-                ExposedDropdownMenu(
-                    expanded = originalSkinExpanded && filteredOriginalSkins.isNotEmpty(),
-                    onDismissRequest = { originalSkinExpanded = false }
-                ) {
-                    filteredOriginalSkins.forEach { skin ->
-                        DropdownMenuItem(
-                            text = { Text(skin.name) },
-                            onClick = {
-                                originalSkinText = skin.name
-                                if (replacementSkinText.equals(skin.name, ignoreCase = true)) {
-                                    replacementSkinText = ""
-                                }
-                                originalSkinExpanded = false
+                    }
+                    if (wasSuggested) {
+                        val suggestionLabel =
+                            if (heroText.equals(suggestedHeroName, ignoreCase = true)) {
+                                "Suggested from script name"
+                            } else {
+                                "Suggested hero: $suggestedHeroName"
                             }
+                        Text(
+                            text = suggestionLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
                         )
                     }
-                }
-            }
+                } // end hero Column
 
-            // Replacement Skin field
-            ExposedDropdownMenuBox(
-                expanded = replacementSkinExpanded && filteredReplacementSkins.isNotEmpty(),
-                onExpandedChange = { replacementSkinExpanded = it }
-            ) {
-                OutlinedTextField(
-                    value = replacementSkinText,
-                    onValueChange = {
-                        replacementSkinText = it
-                        replacementSkinExpanded = true
-                    },
-                    label = { Text("Replacement Skin (new skin)") },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-                    singleLine = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = replacementSkinExpanded) }
-                )
-                ExposedDropdownMenu(
+                // Replacement Skin field
+                ExposedDropdownMenuBox(
                     expanded = replacementSkinExpanded && filteredReplacementSkins.isNotEmpty(),
-                    onDismissRequest = { replacementSkinExpanded = false }
+                    onExpandedChange = { replacementSkinExpanded = it }
                 ) {
-                    filteredReplacementSkins.forEach { skin ->
-                        DropdownMenuItem(
-                            text = { Text(skin.name) },
-                            onClick = {
-                                replacementSkinText = skin.name
-                                replacementSkinExpanded = false
+                    OutlinedTextField(
+                        value = replacementSkinText,
+                        onValueChange = {
+                            replacementSkinText = it
+                            replacementSkinExpanded = true
+                        },
+                        label = { Text("Replacement Skin") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+                        singleLine = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = replacementSkinExpanded) }
+                    )
+                    ExposedDropdownMenu(
+                        expanded = replacementSkinExpanded && filteredReplacementSkins.isNotEmpty(),
+                        onDismissRequest = { replacementSkinExpanded = false }
+                    ) {
+                        filteredReplacementSkins.forEach { skin ->
+                            DropdownMenuItem(
+                                text = { Text(skin.name) },
+                                onClick = {
+                                    replacementSkinText = skin.name
+                                    replacementSkinExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Original Skin field
+                ExposedDropdownMenuBox(
+                    expanded = originalSkinExpanded && filteredOriginalSkins.isNotEmpty(),
+                    onExpandedChange = { originalSkinExpanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = originalSkinText,
+                        onValueChange = {
+                            originalSkinText = it
+                            if (replacementSkinText.equals(it.trim(), ignoreCase = true)) {
+                                replacementSkinText = ""
                             }
-                        )
+                            originalSkinExpanded = true
+                        },
+                        label = { Text("Original Skin") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+                        singleLine = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = originalSkinExpanded) }
+                    )
+                    ExposedDropdownMenu(
+                        expanded = originalSkinExpanded && filteredOriginalSkins.isNotEmpty(),
+                        onDismissRequest = { originalSkinExpanded = false }
+                    ) {
+                        filteredOriginalSkins.forEach { skin ->
+                            DropdownMenuItem(
+                                text = { Text(skin.name) },
+                                onClick = {
+                                    originalSkinText = skin.name
+                                    if (replacementSkinText.equals(skin.name, ignoreCase = true)) {
+                                        replacementSkinText = ""
+                                    }
+                                    originalSkinExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
             }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(heroText, originalSkinText, replacementSkinText) },
+                enabled = canConfirm
             ) {
-                TextButton(onClick = onDismiss) {
-                    Text("Cancel")
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(
-                    onClick = { onConfirm(heroText, originalSkinText, replacementSkinText) },
-                    enabled = canConfirm
-                ) {
-                    Text("Save")
-                }
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
             }
         }
-    }
+    )
 }
 
 private fun flattenTree(

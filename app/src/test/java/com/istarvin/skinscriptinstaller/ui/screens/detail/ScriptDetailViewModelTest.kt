@@ -2,6 +2,7 @@ package com.istarvin.skinscriptinstaller.ui.screens.detail
 
 import androidx.lifecycle.SavedStateHandle
 import com.istarvin.skinscriptinstaller.IFileService
+import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
@@ -16,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.*
 import org.junit.After
 import org.junit.Assert.*
@@ -325,5 +327,23 @@ class ScriptDetailViewModelTest {
 
         vm.clearError()
         assertNull(vm.error.value)
+    }
+
+    @Test
+    fun `suggestedHeroName infers hero from script name`() = runTest {
+        val script = SkinScript(id = 1L, name = "Miya Legend Pack", storagePath = tempFolder.root.absolutePath)
+        val heroes = listOf(Hero(id = 1L, name = "Miya"), Hero(id = 2L, name = "Layla"))
+        coEvery { repository.getScriptById(1L) } returns script
+        every { repository.getAllHeroes() } returns flowOf(heroes)
+
+        val vm = createViewModel()
+        val collectJob = launch(UnconfinedTestDispatcher(testScheduler)) {
+            vm.suggestedHeroName.collect {}
+        }
+        advanceUntilIdle()
+
+        assertEquals("Miya", vm.suggestedHeroName.value)
+
+        collectJob.cancel()
     }
 }

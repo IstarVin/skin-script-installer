@@ -175,8 +175,9 @@ class ScriptListViewModelTest {
 
     @Test
     fun `importScript calls use case and clears error on success`() = runTest {
+        val importedScript = SkinScript(id = 1L, name = "Test", storagePath = "/path")
         coEvery { importScriptUseCase.execute(any()) } answers {
-            Result.success(SkinScript(id = 1L, name = "Test", storagePath = "/path"))
+            Result.success(importedScript)
         }
         createViewModel()
 
@@ -186,6 +187,7 @@ class ScriptListViewModelTest {
 
         assertNull(viewModel.importError.value)
         assertFalse(viewModel.isImporting.value)
+        assertEquals(importedScript.id, viewModel.pendingClassificationScriptId.value)
         coVerify { importScriptUseCase.execute(uri) }
     }
 
@@ -255,6 +257,7 @@ class ScriptListViewModelTest {
     @Test
     fun `retryZipWithPassword retries with password`() = runTest {
         val uri = mockk<Uri>(relaxed = true)
+        val importedScript = SkinScript(id = 1L, name = "Test", storagePath = "/path")
 
         // First call triggers password prompt, second call succeeds
         var callCount = 0
@@ -263,7 +266,7 @@ class ScriptListViewModelTest {
             if (callCount == 1) {
                 Result.failure(PasswordRequiredException())
             } else {
-                Result.success(SkinScript(id = 1L, name = "Test", storagePath = "/path"))
+                Result.success(importedScript)
             }
         }
 
@@ -277,6 +280,7 @@ class ScriptListViewModelTest {
         advanceUntilIdle()
 
         assertNull(viewModel.zipPasswordPrompt.value)
+        assertEquals(importedScript.id, viewModel.pendingClassificationScriptId.value)
     }
 
     @Test
@@ -293,6 +297,22 @@ class ScriptListViewModelTest {
         assertNotNull(viewModel.zipPasswordPrompt.value)
         viewModel.dismissZipPasswordPrompt()
         assertNull(viewModel.zipPasswordPrompt.value)
+    }
+
+    @Test
+    fun `dismissPendingClassification clears pending script id`() = runTest {
+        coEvery { importScriptUseCase.execute(any()) } answers {
+            Result.success(SkinScript(id = 7L, name = "Test", storagePath = "/path"))
+        }
+        createViewModel()
+
+        viewModel.importScript(mockk(relaxed = true))
+        advanceUntilIdle()
+        assertEquals(7L, viewModel.pendingClassificationScriptId.value)
+
+        viewModel.dismissPendingClassification()
+
+        assertNull(viewModel.pendingClassificationScriptId.value)
     }
 
     @Test

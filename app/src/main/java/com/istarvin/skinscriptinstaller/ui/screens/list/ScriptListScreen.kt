@@ -120,6 +120,13 @@ fun ScriptListScreen(
         }
     }
 
+    LaunchedEffect(pendingClassificationScriptId) {
+        pendingClassificationScriptId?.let { scriptId ->
+            viewModel.dismissPendingClassification()
+            onScriptClickAutoClassify(scriptId)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -399,28 +406,6 @@ fun ScriptListScreen(
                     }
                 )
             }
-        }
-
-        // Prompt user to classify after a successful import
-        pendingClassificationScriptId?.let { scriptId ->
-            AlertDialog(
-                onDismissRequest = { viewModel.dismissPendingClassification() },
-                title = { Text("Script Imported") },
-                text = { Text("Would you like to classify this script now?") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        viewModel.dismissPendingClassification()
-                        onScriptClickAutoClassify(scriptId)
-                    }) {
-                        Text("Classify Now")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.dismissPendingClassification() }) {
-                        Text("Later")
-                    }
-                }
-            )
         }
     }
 }
