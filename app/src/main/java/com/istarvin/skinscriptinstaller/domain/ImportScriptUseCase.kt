@@ -31,6 +31,8 @@ class ImportScriptUseCase @Inject constructor(
     companion object {
         private const val ML_ASSETS_PREFIX =
             "Android/data/com.mobile.legends/files/dragon2017/assets"
+        private const val MISSING_ART_ERROR =
+            "Invalid script: expected an Art folder in the selected content"
     }
 
     suspend fun execute(treeUri: Uri): Result<SkinScript> = withContext(Dispatchers.IO) {
@@ -43,6 +45,10 @@ class ImportScriptUseCase @Inject constructor(
 
             // Determine the structure type
             val structureInfo = detectStructure(rootDoc)
+
+            if (structureInfo.type == StructureType.INVALID_NO_ART) {
+                return@withContext Result.failure(IllegalArgumentException(MISSING_ART_ERROR))
+            }
 
             when (structureInfo.type) {
                 StructureType.FULL_PATH -> {
@@ -59,12 +65,7 @@ class ImportScriptUseCase @Inject constructor(
                     copyDocumentTree(sourceDoc, destAssetsDir)
                 }
 
-                StructureType.UNKNOWN -> {
-                    // Assume it's raw asset content — wrap it in the ML path
-                    val destAssetsDir = File(scriptDir, ML_ASSETS_PREFIX)
-                    destAssetsDir.mkdirs()
-                    copyDocumentTree(rootDoc, destAssetsDir)
-                }
+                StructureType.INVALID_NO_ART -> Unit
             }
 
             val name = rootDoc.name ?: "Unknown Script"
@@ -132,6 +133,10 @@ class ImportScriptUseCase @Inject constructor(
         val scriptDir = File(context.filesDir, "scripts/$scriptId")
         val structureInfo = detectFileStructure(rootDir)
 
+        if (structureInfo.type == StructureType.INVALID_NO_ART) {
+            return Result.failure(IllegalArgumentException(MISSING_ART_ERROR))
+        }
+
         when (structureInfo.type) {
             StructureType.FULL_PATH -> {
                 copyFileTree(rootDir, scriptDir)
@@ -144,11 +149,7 @@ class ImportScriptUseCase @Inject constructor(
                 copyFileTree(sourceDir, destAssetsDir)
             }
 
-            StructureType.UNKNOWN -> {
-                val destAssetsDir = File(scriptDir, ML_ASSETS_PREFIX)
-                destAssetsDir.mkdirs()
-                copyFileTree(rootDir, destAssetsDir)
-            }
+            StructureType.INVALID_NO_ART -> Unit
         }
 
         val scriptName = queryDisplayName(sourceUri)?.removeSuffix(".zip") ?: rootDir.name
@@ -182,26 +183,29 @@ class ImportScriptUseCase @Inject constructor(
 
     private fun detectFileStructure(rootDir: File): StructureInfo {
         val fullPathDir = File(rootDir, "Android/data/com.mobile.legends")
-        if (fullPathDir.exists() && fullPathDir.isDirectory) {
+        val artParent = findArtFolderParent(rootDir)
+
+        if (fullPathDir.exists() && fullPathDir.isDirectory && artParent != null) {
             return StructureInfo(StructureType.FULL_PATH)
         }
 
-        val artParent = findArtFolderParent(rootDir)
         if (artParent != null) {
             return StructureInfo(StructureType.ART_FOLDER, artParentDir = artParent)
         }
 
-        return StructureInfo(StructureType.UNKNOWN)
+        return StructureInfo(StructureType.INVALID_NO_ART)
     }
 
     private fun detectStructure(rootDoc: DocumentFile): StructureInfo {
         // Check if root contains "Android" directory leading to ML path
         val androidDir = rootDoc.findFile("Android")
+        val artParent = findArtFolderParent(rootDoc)
+
         if (androidDir != null && androidDir.isDirectory) {
             val dataDir = androidDir.findFile("data")
             if (dataDir != null && dataDir.isDirectory) {
                 val mlDir = dataDir.findFile("com.mobile.legends")
-                if (mlDir != null && mlDir.isDirectory) {
+                if (mlDir != null && mlDir.isDirectory && artParent != null) {
                     return StructureInfo(StructureType.FULL_PATH)
                 }
             }
@@ -209,12 +213,11 @@ class ImportScriptUseCase @Inject constructor(
 
         // Recursively walk the tree to find an Art folder (mirrors os.walk in Python).
         // Returns the *parent* of the Art folder so we copy from there.
-        val artParent = findArtFolderParent(rootDoc)
         if (artParent != null) {
             return StructureInfo(StructureType.ART_FOLDER, artParent)
         }
 
-        return StructureInfo(StructureType.UNKNOWN)
+        return StructureInfo(StructureType.INVALID_NO_ART)
     }
 
     /**
@@ -293,7 +296,7 @@ class ImportScriptUseCase @Inject constructor(
     private enum class StructureType {
         FULL_PATH,   // Contains Android/data/com.mobile.legends/...
         ART_FOLDER,  // Art/ folder found (possibly nested) — artParentDoc holds its parent
-        UNKNOWN      // Raw content — treat same as ART_FOLDER
+        INVALID_NO_ART
     }
 }
 
