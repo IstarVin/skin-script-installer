@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +23,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.FolderZip
+import androidx.compose.material.icons.outlined.DriveFolderUpload
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,7 +37,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -41,6 +49,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -156,6 +165,14 @@ fun ScriptListScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Outlined.FolderOpen,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(80.dp)
+                                .padding(bottom = 16.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        )
                         Text(
                             text = "No scripts imported",
                             style = MaterialTheme.typography.titleMedium,
@@ -189,22 +206,60 @@ fun ScriptListScreen(
         }
 
         if (showImportChoiceDialog) {
-            AlertDialog(
+            val sheetState = rememberModalBottomSheetState()
+            ModalBottomSheet(
                 onDismissRequest = { showImportChoiceDialog = false },
-                title = { Text("Import Script") },
-                text = { Text("Choose what to import") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showImportChoiceDialog = false
-                        val folderIntent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-                        folderPickerLauncher.launch(folderIntent)
-                    }) {
-                        Text("Folder")
-                    }
-                },
-                dismissButton = {
-                    Row {
-                        TextButton(onClick = {
+                sheetState = sheetState,
+                dragHandle = null
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 32.dp, top = 24.dp)
+                ) {
+                    Text(
+                        text = "Import Script",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                    )
+                    Text(
+                        text = "Choose the format of your skin script",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 16.dp)
+                    )
+                    
+                    ListItem(
+                        headlineContent = { Text("Import Folder") },
+                        supportingContent = { Text("Select an extracted script directory") },
+                        leadingContent = {
+                            Icon(
+                                Icons.Outlined.DriveFolderUpload,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        modifier = Modifier.clickable {
+                            showImportChoiceDialog = false
+                            val folderIntent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                            folderPickerLauncher.launch(folderIntent)
+                        },
+                        colors = ListItemDefaults.colors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                    
+                    ListItem(
+                        headlineContent = { Text("Import ZIP") },
+                        supportingContent = { Text("Select a compressed (.zip) archive") },
+                        leadingContent = {
+                            Icon(
+                                Icons.Outlined.FolderZip,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.tertiary
+                            )
+                        },
+                        modifier = Modifier.clickable {
                             showImportChoiceDialog = false
                             val zipIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -219,15 +274,13 @@ fun ScriptListScreen(
                                 )
                             }
                             zipPickerLauncher.launch(zipIntent)
-                        }) {
-                            Text("ZIP")
-                        }
-                        TextButton(onClick = { showImportChoiceDialog = false }) {
-                            Text("Cancel")
-                        }
-                    }
+                        },
+                        colors = ListItemDefaults.colors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
                 }
-            )
+            }
         }
 
         zipPasswordPrompt?.let { prompt ->
@@ -391,7 +444,10 @@ private fun ScriptCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
@@ -403,7 +459,8 @@ private fun ScriptCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = item.script.name,
-                    style = MaterialTheme.typography.titleMedium
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -421,7 +478,7 @@ private fun ScriptCard(
                 Icon(
                     Icons.Default.Delete,
                     contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.error
+                    tint = MaterialTheme.colorScheme.outline
                 )
             }
         }

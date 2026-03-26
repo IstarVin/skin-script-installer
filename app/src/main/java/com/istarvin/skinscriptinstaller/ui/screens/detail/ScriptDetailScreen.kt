@@ -1,8 +1,7 @@
 package com.istarvin.skinscriptinstaller.ui.screens.detail
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,11 +9,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -31,9 +34,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -96,49 +99,81 @@ fun ScriptDetailScreen(
             // Script info card
             item {
                 script?.let { s ->
+                    val isInstalled = installation?.status == "installed"
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isInstalled) 
+                                MaterialTheme.colorScheme.primaryContainer 
+                            else 
+                                MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
+                        Column(modifier = Modifier.padding(24.dp)) {
                             Text(
                                 text = s.name,
-                                style = MaterialTheme.typography.headlineSmall
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = if (isInstalled) 
+                                    MaterialTheme.colorScheme.onPrimaryContainer 
+                                else 
+                                    MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
                             Text(
                                 text = "Imported: ${formatDate(s.importedAt)}",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isInstalled) 
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                else 
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = "User scope: User $selectedUserId",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isInstalled) 
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                else 
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
                             installation?.let { inst ->
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "Status: ${inst.status.replaceFirstChar { it.uppercase() }}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (inst.status == "installed")
-                                        MaterialTheme.colorScheme.primary
-                                    else
-                                        MaterialTheme.colorScheme.tertiary
-                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (inst.status == "installed")
+                                            MaterialTheme.colorScheme.primary
+                                        else
+                                            MaterialTheme.colorScheme.tertiary
+                                    ),
+                                    shape = MaterialTheme.shapes.small
+                                ) {
+                                    Text(
+                                        text = inst.status.uppercase(),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (inst.status == "installed")
+                                            MaterialTheme.colorScheme.onPrimary
+                                        else
+                                            MaterialTheme.colorScheme.onTertiary
+                                    )
+                                }
+                                
                                 if (inst.status == "installed") {
+                                    Spacer(modifier = Modifier.height(8.dp))
                                     Text(
                                         text = "Installed: ${formatDate(inst.installedAt)}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                                     )
                                 }
                                 inst.restoredAt?.let { restoredAt ->
+                                    Spacer(modifier = Modifier.height(8.dp))
                                     Text(
                                         text = "Restored: ${formatDate(restoredAt)}",
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                                     )
                                 }
                             }
@@ -251,18 +286,26 @@ fun ScriptDetailScreen(
                         .clickable(enabled = node.isDirectory) {
                             viewModel.toggleDirectory(node.id)
                         }
-                        .padding(start = (node.depth * 16).dp, top = 2.dp, bottom = 2.dp),
+                        .padding(start = (node.depth * 24).dp, top = 6.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = when {
-                            !node.isDirectory -> "📄"
-                            node.id in expandedDirectoryIds -> "📂"
-                            else -> "📁"
-                        },
-                        style = MaterialTheme.typography.bodySmall
+                    val icon = when {
+                        !node.isDirectory -> Icons.AutoMirrored.Filled.InsertDriveFile
+                        node.id in expandedDirectoryIds -> Icons.Default.FolderOpen
+                        else -> Icons.Default.Folder
+                    }
+                    val iconTint = if (node.isDirectory) 
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f) 
+                    else 
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = iconTint
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = node.name,
                         style = MaterialTheme.typography.bodySmall,

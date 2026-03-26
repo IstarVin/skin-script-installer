@@ -1,5 +1,8 @@
 package com.istarvin.skinscriptinstaller.ui.screens.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -94,7 +99,11 @@ fun SettingsScreen(
             }
 
             // Action buttons
-            if (!isShizukuAvailable) {
+            AnimatedVisibility(
+                visible = !isShizukuAvailable,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer
@@ -117,7 +126,11 @@ fun SettingsScreen(
                 }
             }
 
-            if (isShizukuAvailable && !isPermissionGranted) {
+            AnimatedVisibility(
+                visible = isShizukuAvailable && !isPermissionGranted,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
                 Button(
                     onClick = { viewModel.requestPermission() },
                     modifier = Modifier.fillMaxWidth()
@@ -126,7 +139,11 @@ fun SettingsScreen(
                 }
             }
 
-            if (isPermissionGranted && !isServiceBound) {
+            AnimatedVisibility(
+                visible = isPermissionGranted && !isServiceBound,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
                 Button(
                     onClick = { viewModel.bindService() },
                     modifier = Modifier.fillMaxWidth()
@@ -141,26 +158,6 @@ fun SettingsScreen(
             ) {
                 Text("Refresh Status")
             }
-
-            // ML target path info
-            Spacer(modifier = Modifier.height(8.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "Mobile Legends Path",
-                        style = MaterialTheme.typography.titleSmall
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "/storage/emulated/{userId}/Android/data/com.mobile.legends/files/dragon2017/assets/",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
         }
     }
 }
@@ -168,7 +165,9 @@ fun SettingsScreen(
 @Composable
 private fun StatusRow(label: String, status: String, isPositive: Boolean) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -177,13 +176,14 @@ private fun StatusRow(label: String, status: String, isPositive: Boolean) {
             style = MaterialTheme.typography.bodyMedium
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = if (isPositive) "●" else "●",
-                color = if (isPositive)
+            Icon(
+                imageVector = if (isPositive) Icons.Rounded.CheckCircle else Icons.Rounded.Error,
+                contentDescription = null,
+                tint = if (isPositive)
                     MaterialTheme.colorScheme.primary
                 else
                     MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(12.dp)
+                modifier = Modifier.size(16.dp)
             )
             Text(
                 text = " $status",
