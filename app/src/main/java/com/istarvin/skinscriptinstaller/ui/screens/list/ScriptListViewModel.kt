@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -37,11 +38,18 @@ class ScriptListViewModel @Inject constructor(
     private val importScriptUseCase: ImportScriptUseCase
 ) : ViewModel() {
 
-    val scripts: StateFlow<List<SkinScript>> = repository.getAllScripts()
+    private val scripts: StateFlow<List<SkinScript>> = repository.getAllScripts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _scriptsWithStatus = MutableStateFlow<List<ScriptWithStatus>>(emptyList())
-    val scriptsWithStatus: StateFlow<List<ScriptWithStatus>> = _scriptsWithStatus.asStateFlow()
+    val scriptsWithStatus: StateFlow<List<ScriptWithStatus>> = combine(
+        scripts,
+        repository.getLatestInstallations()
+    ) { scriptList, latestInstallations ->
+        val latestByScriptId = latestInstallations.associateBy { it.scriptId }
+        scriptList.map { script ->
+            ScriptWithStatus(script, latestByScriptId[script.id])
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _importError = MutableStateFlow<String?>(null)
     val importError: StateFlow<String?> = _importError.asStateFlow()
@@ -51,18 +59,6 @@ class ScriptListViewModel @Inject constructor(
 
     private val _zipPasswordPrompt = MutableStateFlow<ZipPasswordPrompt?>(null)
     val zipPasswordPrompt: StateFlow<ZipPasswordPrompt?> = _zipPasswordPrompt.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            scripts.collect { scriptList ->
-                val withStatus = scriptList.map { script ->
-                    val installation = repository.getLatestInstallation(script.id)
-                    ScriptWithStatus(script, installation)
-                }
-                _scriptsWithStatus.value = withStatus
-            }
-        }
-    }
 
     fun importScript(treeUri: Uri) {
         viewModelScope.launch {

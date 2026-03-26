@@ -42,6 +42,9 @@ class ScriptRepository @Inject constructor(
     suspend fun getInstallationById(id: Long): Installation? =
         installationDao.getById(id)
 
+    fun getLatestInstallations(): Flow<List<Installation>> =
+        installationDao.getLatestInstallations()
+
     // --- InstalledFile ---
 
     suspend fun insertInstalledFile(file: InstalledFile): Long =

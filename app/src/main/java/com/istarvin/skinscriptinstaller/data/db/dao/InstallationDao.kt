@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface InstallationDao {
@@ -22,5 +23,8 @@ interface InstallationDao {
 
     @Query("SELECT * FROM installations WHERE scriptId = :scriptId ORDER BY installedAt DESC")
     suspend fun getAllByScriptId(scriptId: Long): List<Installation>
+
+    @Query("SELECT * FROM installations WHERE id IN (SELECT MAX(id) FROM installations GROUP BY scriptId)")
+    fun getLatestInstallations(): Flow<List<Installation>>
 }
 
