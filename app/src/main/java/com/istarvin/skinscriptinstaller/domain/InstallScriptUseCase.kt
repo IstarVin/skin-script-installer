@@ -20,7 +20,7 @@ import javax.inject.Inject
  * Backs up any existing files that would be overwritten.
  */
 class InstallScriptUseCase @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val repository: ScriptRepository,
     private val shizukuManager: ShizukuManager
 ) {

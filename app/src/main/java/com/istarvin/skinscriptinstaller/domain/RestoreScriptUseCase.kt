@@ -19,7 +19,7 @@ import javax.inject.Inject
  * - Files that were overwritten (wasOverwrite=true) → restored from backup
  */
 class RestoreScriptUseCase @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val repository: ScriptRepository,
     private val shizukuManager: ShizukuManager
 ) {
