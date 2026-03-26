@@ -128,7 +128,7 @@ class ScriptListViewModelTest {
         val result = viewModel.heroScriptSections.value
         assertEquals(3, result.size)
         assertEquals(listOf("Miya", "Layla", "Uncategorized"), result.map { it.title })
-        assertTrue(result.all { it.isExpanded })
+        assertTrue(result.all { !it.isExpanded })
         assertEquals(listOf(1L), result[0].skinReplacementSections.single().scripts.map { it.script.id })
         assertEquals(listOf(2L), result[1].skinReplacementSections.single().scripts.map { it.script.id })
         assertEquals(listOf(3L), result[2].flatScripts.map { it.script.id })
@@ -161,14 +161,14 @@ class ScriptListViewModelTest {
         advanceUntilIdle()
 
         var result = viewModel.heroScriptSections.value
-        assertFalse(result.first { it.key == "Miya" }.isExpanded)
-        assertTrue(result.first { it.key == "Layla" }.isExpanded)
+        assertTrue(result.first { it.key == "Miya" }.isExpanded)
+        assertFalse(result.first { it.key == "Layla" }.isExpanded)
 
         viewModel.toggleSection("Miya")
         advanceUntilIdle()
 
         result = viewModel.heroScriptSections.value
-        assertTrue(result.first { it.key == "Miya" }.isExpanded)
+        assertFalse(result.first { it.key == "Miya" }.isExpanded)
 
         collectJob.cancel()
     }

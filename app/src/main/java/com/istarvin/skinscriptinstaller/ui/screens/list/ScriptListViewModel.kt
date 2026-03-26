@@ -217,7 +217,7 @@ class ScriptListViewModel @Inject constructor(
                     allKeys.isEmpty() -> emptySet()
                     !didInitializeExpandedSections -> {
                         didInitializeExpandedSections = true
-                        allKeys
+                        emptySet()
                     }
 
                     else -> buildSet {
