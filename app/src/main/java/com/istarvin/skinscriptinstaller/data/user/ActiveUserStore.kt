@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
+import androidx.core.content.edit
 
 @Singleton
 class ActiveUserStore @Inject constructor(
@@ -27,6 +28,6 @@ class ActiveUserStore @Inject constructor(
             return
         }
         _activeUserId.value = userId
-        prefs.edit().putInt(KEY_ACTIVE_USER_ID, userId).apply()
+        prefs.edit { putInt(KEY_ACTIVE_USER_ID, userId) }
     }
 }
