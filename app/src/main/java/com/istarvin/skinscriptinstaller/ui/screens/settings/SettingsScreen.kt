@@ -155,7 +155,7 @@ fun SettingsScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "/storage/emulated/0/Android/data/com.mobile.legends/files/dragon2017/assets/",
+                        text = "/storage/emulated/{userId}/Android/data/com.mobile.legends/files/dragon2017/assets/",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

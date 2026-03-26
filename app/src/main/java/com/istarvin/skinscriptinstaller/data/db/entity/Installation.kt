@@ -15,12 +15,13 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("scriptId")]
+    indices = [Index("scriptId"), Index("userId")]
 )
 data class Installation(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val scriptId: Long,
+    val userId: Int = 0,
     val installedAt: Long = System.currentTimeMillis(),
     val restoredAt: Long? = null,
     val status: String = "installed" // "installed" | "restored"

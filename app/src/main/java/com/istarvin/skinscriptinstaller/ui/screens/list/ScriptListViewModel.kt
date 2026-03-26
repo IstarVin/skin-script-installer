@@ -6,16 +6,19 @@ import androidx.lifecycle.viewModelScope
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
+import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.service.InvalidPasswordException
 import com.istarvin.skinscriptinstaller.service.PasswordRequiredException
+import com.istarvin.skinscriptinstaller.service.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -34,24 +37,36 @@ data class ZipPasswordPrompt(
 )
 
 @HiltViewModel
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ScriptListViewModel @Inject constructor(
     private val repository: ScriptRepository,
     private val importScriptUseCase: ImportScriptUseCase,
-    private val restoreScriptUseCase: RestoreScriptUseCase
+    private val restoreScriptUseCase: RestoreScriptUseCase,
+    private val activeUserStore: ActiveUserStore,
+    private val shizukuManager: ShizukuManager
 ) : ViewModel() {
+
+    private val _eligibleUserIds = MutableStateFlow<List<Int>>(emptyList())
+    val eligibleUserIds: StateFlow<List<Int>> = _eligibleUserIds.asStateFlow()
+
+    val activeUserId: StateFlow<Int> = activeUserStore.activeUserId
 
     private val scripts: StateFlow<List<SkinScript>> = repository.getAllScripts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val scriptsWithStatus: StateFlow<List<ScriptWithStatus>> = combine(
-        scripts,
-        repository.getLatestInstallations()
-    ) { scriptList, latestInstallations ->
-        val latestByScriptId = latestInstallations.associateBy { it.scriptId }
-        scriptList.map { script ->
-            ScriptWithStatus(script, latestByScriptId[script.id])
+    val scriptsWithStatus: StateFlow<List<ScriptWithStatus>> = activeUserId
+        .flatMapLatest { selectedUserId ->
+            combine(
+                scripts,
+                repository.getLatestInstallations(selectedUserId)
+            ) { scriptList, latestInstallations ->
+                val latestByScriptId = latestInstallations.associateBy { it.scriptId }
+                scriptList.map { script ->
+                    ScriptWithStatus(script, latestByScriptId[script.id])
+                }
+            }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _importError = MutableStateFlow<String?>(null)
     val importError: StateFlow<String?> = _importError.asStateFlow()
@@ -61,6 +76,49 @@ class ScriptListViewModel @Inject constructor(
 
     private val _zipPasswordPrompt = MutableStateFlow<ZipPasswordPrompt?>(null)
     val zipPasswordPrompt: StateFlow<ZipPasswordPrompt?> = _zipPasswordPrompt.asStateFlow()
+
+    init {
+        observeEligibleUsers()
+    }
+
+    private fun observeEligibleUsers() {
+        viewModelScope.launch {
+            shizukuManager.fileService.collect {
+                refreshEligibleUsers()
+            }
+        }
+    }
+
+    private fun refreshEligibleUsers() {
+        val service = shizukuManager.fileService.value
+        if (service == null) {
+            _eligibleUserIds.value = emptyList()
+            activeUserStore.setActiveUser(0)
+            return
+        }
+
+        val detected = try {
+            service.listEligibleMlUserIds().toList().distinct().sorted()
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        _eligibleUserIds.value = detected
+
+        val nextActiveUser = when {
+            detected.isEmpty() -> 0
+            activeUserId.value in detected -> activeUserId.value
+            0 in detected -> 0
+            else -> detected.first()
+        }
+        activeUserStore.setActiveUser(nextActiveUser)
+    }
+
+    fun selectActiveUser(userId: Int) {
+        if (userId in _eligibleUserIds.value) {
+            activeUserStore.setActiveUser(userId)
+        }
+    }
 
     fun importScript(treeUri: Uri) {
         viewModelScope.launch {
@@ -129,7 +187,7 @@ class ScriptListViewModel @Inject constructor(
             _importError.value = null
 
             if (restoreBeforeDelete) {
-                val latestInstallation = repository.getLatestInstallation(script.id)
+                val latestInstallation = repository.getLatestInstallation(script.id, activeUserId.value)
                 if (latestInstallation == null || latestInstallation.status != "installed") {
                     _importError.value = "No active installation found to restore"
                     return@launch

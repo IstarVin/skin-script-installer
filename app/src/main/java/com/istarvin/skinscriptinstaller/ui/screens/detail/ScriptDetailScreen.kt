@@ -120,6 +120,12 @@ fun ScriptDetailScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "User scope: User $selectedUserId",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             installation?.let { inst ->
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(

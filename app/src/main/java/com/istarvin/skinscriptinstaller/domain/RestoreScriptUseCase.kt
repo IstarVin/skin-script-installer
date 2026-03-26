@@ -44,6 +44,14 @@ class RestoreScriptUseCase @Inject constructor(
                 return@withContext Result.failure(Exception("No installed files to restore"))
             }
 
+            installedFiles.forEach { file ->
+                if (!file.destPath.belongsToUser(installation.userId)) {
+                    return@withContext Result.failure(
+                        Exception("Restore aborted: installation contains mismatched user file path")
+                    )
+                }
+            }
+
             installedFiles.forEachIndexed { index, file ->
                 _progress.value = InstallProgress(
                     currentIndex = index + 1,
@@ -99,6 +107,11 @@ class RestoreScriptUseCase @Inject constructor(
 
     fun resetProgress() {
         _progress.value = null
+    }
+
+    private fun String.belongsToUser(userId: Int): Boolean {
+        val expectedPrefix = "/storage/emulated/$userId/"
+        return startsWith(expectedPrefix)
     }
 }
 

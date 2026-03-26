@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
+import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
 import com.istarvin.skinscriptinstaller.domain.InstallProgress
 import com.istarvin.skinscriptinstaller.domain.InstallScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
@@ -33,6 +34,7 @@ data class FileTreeNode(
 class ScriptDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: ScriptRepository,
+    private val activeUserStore: ActiveUserStore,
     private val installScriptUseCase: InstallScriptUseCase,
     private val restoreScriptUseCase: RestoreScriptUseCase,
     private val shizukuManager: ShizukuManager
@@ -75,7 +77,19 @@ class ScriptDetailViewModel @Inject constructor(
 
     init {
         loadScript()
+        observeActiveUser()
         observeFileService()
+    }
+
+    private fun observeActiveUser() {
+        viewModelScope.launch {
+            activeUserStore.activeUserId.collectLatest { activeUserId ->
+                if (_selectedUserId.value != activeUserId) {
+                    _selectedUserId.value = activeUserId
+                    loadInstallationForSelectedUser()
+                }
+            }
+        }
     }
 
     private fun observeFileService() {
@@ -108,11 +122,16 @@ class ScriptDetailViewModel @Inject constructor(
             0 in detected -> 0
             else -> detected.first()
         }
+
+        activeUserStore.setActiveUser(_selectedUserId.value)
+        loadInstallationForSelectedUser()
     }
 
     fun selectInstallUser(userId: Int) {
         if (userId in _eligibleUserIds.value) {
             _selectedUserId.value = userId
+            activeUserStore.setActiveUser(userId)
+            loadInstallationForSelectedUser()
         }
     }
 
@@ -121,9 +140,16 @@ class ScriptDetailViewModel @Inject constructor(
             val script = repository.getScriptById(scriptId)
             _script.value = script
             script?.let {
-                _installation.value = repository.getLatestInstallation(it.id)
                 buildFileTree(it.storagePath)
+                loadInstallationForSelectedUser()
             }
+        }
+    }
+
+    private fun loadInstallationForSelectedUser() {
+        val currentScriptId = _script.value?.id ?: return
+        viewModelScope.launch {
+            _installation.value = repository.getLatestInstallation(currentScriptId, _selectedUserId.value)
         }
     }
 
@@ -207,6 +233,8 @@ class ScriptDetailViewModel @Inject constructor(
                 return@launch
             }
 
+            activeUserStore.setActiveUser(targetUserId)
+
             _isOperating.value = true
             _error.value = null
             installScriptUseCase.resetProgress()
@@ -231,7 +259,7 @@ class ScriptDetailViewModel @Inject constructor(
             val result = restoreScriptUseCase.execute(inst.id)
             result.onSuccess {
                 // Reload installation to get updated status
-                _installation.value = repository.getLatestInstallation(scriptId)
+                _installation.value = repository.getLatestInstallation(scriptId, _selectedUserId.value)
             }.onFailure { e ->
                 _error.value = e.message ?: "Restore failed"
             }

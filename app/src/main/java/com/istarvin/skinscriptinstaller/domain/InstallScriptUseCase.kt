@@ -56,7 +56,7 @@ class InstallScriptUseCase @Inject constructor(
             }
 
             // Create installation record
-            val installation = Installation(scriptId = scriptId)
+            val installation = Installation(scriptId = scriptId, userId = userId)
             val installationId = repository.insertInstallation(installation)
 
             // Backup directory for this installation

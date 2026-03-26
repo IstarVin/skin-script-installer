@@ -11,7 +11,7 @@ import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 
 @Database(
     entities = [SkinScript::class, Installation::class, InstalledFile::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
