@@ -75,15 +75,22 @@ jobs:
 
       - name: Create checksums
         run: |
-          cd dist
-          sha256sum app-release-apk/* > checksums.txt
-          cat checksums.txt
+          mapfile -d '' apks < <(find dist -type f -name "*.apk" -print0)
+
+          if [ "${#apks[@]}" -eq 0 ]; then
+            echo "No APK files found under dist/"
+            find dist -maxdepth 3 -print
+            exit 1
+          fi
+
+          printf '%s\0' "${apks[@]}" | xargs -0 sha256sum > dist/checksums.txt
+          cat dist/checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/app-release-apk/*
+            dist/**/*.apk
             dist/checksums.txt
           generate_release_notes: true
           draft: false
