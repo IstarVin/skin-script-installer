@@ -21,9 +21,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+private const val UNCATEGORIZED_SECTION_KEY = "__uncategorized__"
 
 data class ScriptWithStatus(
     val script: SkinScript,
@@ -44,6 +47,25 @@ data class ZipPasswordPrompt(
     val errorMessage: String? = null
 )
 
+data class HeroScriptGroup(
+    val key: String,
+    val title: String,
+    val scripts: List<ScriptWithStatus>
+) {
+    val count: Int
+        get() = scripts.size
+}
+
+data class HeroScriptSection(
+    val key: String,
+    val title: String,
+    val scripts: List<ScriptWithStatus>,
+    val isExpanded: Boolean
+) {
+    val count: Int
+        get() = scripts.size
+}
+
 @HiltViewModel
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ScriptListViewModel @Inject constructor(
@@ -54,8 +76,13 @@ class ScriptListViewModel @Inject constructor(
     private val shizukuManager: ShizukuManager
 ) : ViewModel() {
 
+    private var didInitializeExpandedSections = false
+
     private val _eligibleUserIds = MutableStateFlow<List<Int>>(emptyList())
     val eligibleUserIds: StateFlow<List<Int>> = _eligibleUserIds.asStateFlow()
+
+    private val _expandedSectionKeys = MutableStateFlow<Set<String>>(emptySet())
+    val expandedSectionKeys: StateFlow<Set<String>> = _expandedSectionKeys.asStateFlow()
 
     val activeUserId: StateFlow<Int> = activeUserStore.activeUserId
 
@@ -94,6 +121,24 @@ class ScriptListViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val heroScriptGroups: StateFlow<List<HeroScriptGroup>> = scriptsWithStatus
+        .map(::buildHeroScriptGroups)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val heroScriptSections: StateFlow<List<HeroScriptSection>> = combine(
+        heroScriptGroups,
+        expandedSectionKeys
+    ) { groups, expandedKeys ->
+        groups.map { group ->
+            HeroScriptSection(
+                key = group.key,
+                title = group.title,
+                scripts = group.scripts,
+                isExpanded = group.key in expandedKeys
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _importError = MutableStateFlow<String?>(null)
     val importError: StateFlow<String?> = _importError.asStateFlow()
 
@@ -105,6 +150,33 @@ class ScriptListViewModel @Inject constructor(
 
     init {
         observeEligibleUsers()
+        observeHeroSections()
+    }
+
+    private fun observeHeroSections() {
+        viewModelScope.launch {
+            heroScriptGroups.collect { groups ->
+                val groupKeys = groups.mapTo(linkedSetOf()) { it.key }
+                val currentExpandedKeys = _expandedSectionKeys.value
+                val nextExpandedKeys = when {
+                    groupKeys.isEmpty() -> emptySet()
+                    !didInitializeExpandedSections -> {
+                        didInitializeExpandedSections = true
+                        groupKeys
+                    }
+
+                    else -> buildSet {
+                        currentExpandedKeys
+                            .filterTo(this) { it in groupKeys }
+                        addAll(groupKeys - currentExpandedKeys)
+                    }
+                }
+
+                if (nextExpandedKeys != currentExpandedKeys) {
+                    _expandedSectionKeys.value = nextExpandedKeys
+                }
+            }
+        }
     }
 
     private fun observeEligibleUsers() {
@@ -143,6 +215,14 @@ class ScriptListViewModel @Inject constructor(
     fun selectActiveUser(userId: Int) {
         if (userId in _eligibleUserIds.value) {
             activeUserStore.setActiveUser(userId)
+        }
+    }
+
+    fun toggleHeroSection(sectionKey: String) {
+        _expandedSectionKeys.value = _expandedSectionKeys.value.toMutableSet().apply {
+            if (!add(sectionKey)) {
+                remove(sectionKey)
+            }
         }
     }
 
@@ -239,6 +319,22 @@ class ScriptListViewModel @Inject constructor(
 
     fun clearImportError() {
         _importError.value = null
+    }
+
+    private fun buildHeroScriptGroups(items: List<ScriptWithStatus>): List<HeroScriptGroup> {
+        if (items.isEmpty()) {
+            return emptyList()
+        }
+
+        return items
+            .groupBy { item -> item.heroName ?: UNCATEGORIZED_SECTION_KEY }
+            .map { (key, scriptsForHero) ->
+                HeroScriptGroup(
+                    key = key,
+                    title = scriptsForHero.first().heroName ?: "Uncategorized",
+                    scripts = scriptsForHero
+                )
+            }
     }
 }
 

@@ -2,6 +2,7 @@ package com.istarvin.skinscriptinstaller.ui.screens.list
 
 import android.net.Uri
 import com.istarvin.skinscriptinstaller.IFileService
+import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
@@ -51,6 +52,7 @@ class ScriptListViewModelTest {
         every { activeUserStore.activeUserId } returns activeUserIdFlow
         every { shizukuManager.fileService } returns fileServiceFlow
         every { repository.getAllScripts() } returns flowOf(emptyList())
+        every { repository.getAllHeroes() } returns flowOf(emptyList())
         every { repository.getLatestInstallations(any<Int>()) } returns flowOf(emptyList())
     }
 
@@ -88,6 +90,76 @@ class ScriptListViewModelTest {
         assertEquals(2, result.size)
         assertEquals("installed", result[0].status)
         assertEquals("not_installed", result[1].status)
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `heroScriptSections groups scripts by hero and uncategorized by default`() = runTest {
+        val heroes = listOf(
+            Hero(id = 1L, name = "Miya"),
+            Hero(id = 2L, name = "Layla")
+        )
+        val scripts = listOf(
+            SkinScript(id = 1L, name = "Miya Epic", storagePath = "/path/1", heroId = 1L),
+            SkinScript(id = 2L, name = "Layla Basic", storagePath = "/path/2", heroId = 2L),
+            SkinScript(id = 3L, name = "Mystery", storagePath = "/path/3")
+        )
+
+        every { repository.getAllHeroes() } returns flowOf(heroes)
+        every { repository.getAllScripts() } returns flowOf(scripts)
+
+        createViewModel()
+
+        val collectJob = launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.heroScriptSections.collect {}
+        }
+        advanceUntilIdle()
+
+        val result = viewModel.heroScriptSections.value
+        assertEquals(3, result.size)
+        assertEquals(listOf("Miya", "Layla", "Uncategorized"), result.map { it.title })
+        assertTrue(result.all { it.isExpanded })
+        assertEquals(listOf(1L), result[0].scripts.map { it.script.id })
+        assertEquals(listOf(2L), result[1].scripts.map { it.script.id })
+        assertEquals(listOf(3L), result[2].scripts.map { it.script.id })
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `toggleHeroSection updates only targeted section expansion`() = runTest {
+        val heroes = listOf(
+            Hero(id = 1L, name = "Miya"),
+            Hero(id = 2L, name = "Layla")
+        )
+        val scripts = listOf(
+            SkinScript(id = 1L, name = "Miya Epic", storagePath = "/path/1", heroId = 1L),
+            SkinScript(id = 2L, name = "Layla Basic", storagePath = "/path/2", heroId = 2L)
+        )
+
+        every { repository.getAllHeroes() } returns flowOf(heroes)
+        every { repository.getAllScripts() } returns flowOf(scripts)
+
+        createViewModel()
+
+        val collectJob = launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.heroScriptSections.collect {}
+        }
+        advanceUntilIdle()
+
+        viewModel.toggleHeroSection("Miya")
+        advanceUntilIdle()
+
+        var result = viewModel.heroScriptSections.value
+        assertFalse(result.first { it.key == "Miya" }.isExpanded)
+        assertTrue(result.first { it.key == "Layla" }.isExpanded)
+
+        viewModel.toggleHeroSection("Miya")
+        advanceUntilIdle()
+
+        result = viewModel.heroScriptSections.value
+        assertTrue(result.first { it.key == "Miya" }.isExpanded)
 
         collectJob.cancel()
     }

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.FolderOpen
@@ -73,7 +76,7 @@ fun ScriptListScreen(
     onSettingsClick: () -> Unit,
     viewModel: ScriptListViewModel = hiltViewModel()
 ) {
-    val scriptsWithStatus by viewModel.scriptsWithStatus.collectAsState()
+    val heroScriptSections by viewModel.heroScriptSections.collectAsState()
     val eligibleUserIds by viewModel.eligibleUserIds.collectAsState()
     val activeUserId by viewModel.activeUserId.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
@@ -157,7 +160,7 @@ fun ScriptListScreen(
                 )
             }
 
-            if (scriptsWithStatus.isEmpty() && !isImporting) {
+            if (heroScriptSections.isEmpty() && !isImporting) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -188,20 +191,21 @@ fun ScriptListScreen(
                 }
             } else {
                 LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(16.dp)
-            ) {
-                items(scriptsWithStatus, key = { it.script.id }) { item ->
-                    ScriptCard(
-                        item = item,
-                        onClick = { onScriptClick(item.script.id) },
-                        onDeleteClick = { scriptToDelete = item }
-                    )
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    items(heroScriptSections, key = { it.key }) { section ->
+                        HeroScriptAccordionSection(
+                            section = section,
+                            onToggle = { viewModel.toggleHeroSection(section.key) },
+                            onScriptClick = onScriptClick,
+                            onDeleteClick = { scriptToDelete = it }
+                        )
+                    }
                 }
-            }
             }
         }
 
@@ -437,11 +441,13 @@ private fun ActiveUserSelector(
 @Composable
 private fun ScriptCard(
     item: ScriptWithStatus,
+    modifier: Modifier = Modifier,
+    showHeroName: Boolean = true,
     onClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
@@ -463,24 +469,25 @@ private fun ScriptCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                if (item.isClassified) {
+                if (item.isClassified && showHeroName) {
                     Text(
                         text = item.heroName ?: "",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    if (item.originalSkinName != null && item.replacementSkinName != null) {
-                        Text(
-                            text = "${item.originalSkinName} → ${item.replacementSkinName}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else {
+                } else if (!item.isClassified && showHeroName) {
                     Text(
                         text = "Uncategorized",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                }
+
+                if (item.originalSkinName != null && item.replacementSkinName != null) {
+                    Text(
+                        text = "${item.originalSkinName} → ${item.replacementSkinName}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -495,6 +502,80 @@ private fun ScriptCard(
                     contentDescription = "Delete",
                     tint = MaterialTheme.colorScheme.outline
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeroScriptAccordionSection(
+    section: HeroScriptSection,
+    onToggle: () -> Unit,
+    onScriptClick: (Long) -> Unit,
+    onDeleteClick: (ScriptWithStatus) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = section.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (section.count == 1) "1 skin script" else "${section.count} skin scripts",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Icon(
+                imageVector = if (section.isExpanded) {
+                    Icons.Default.ExpandLess
+                } else {
+                    Icons.Default.ExpandMore
+                },
+                contentDescription = if (section.isExpanded) {
+                    "Collapse ${section.title}"
+                } else {
+                    "Expand ${section.title}"
+                },
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (section.isExpanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                section.scripts.forEach { item ->
+                    ScriptCard(
+                        item = item,
+                        modifier = Modifier.padding(start = 8.dp),
+                        showHeroName = false,
+                        onClick = { onScriptClick(item.script.id) },
+                        onDeleteClick = { onDeleteClick(item) }
+                    )
+                }
             }
         }
     }
