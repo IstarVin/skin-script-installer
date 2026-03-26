@@ -87,6 +87,7 @@ fun ScriptDetailScreen(
     val replacementSkinName by viewModel.replacementSkinName.collectAsState()
     val allHeroes by viewModel.allHeroes.collectAsState()
     val skinsForSelectedHero by viewModel.skinsForSelectedHero.collectAsState()
+    val suggestedHeroName by viewModel.suggestedHeroName.collectAsState()
 
     var showClassifySheet by remember { mutableStateOf(false) }
 
@@ -363,6 +364,7 @@ fun ScriptDetailScreen(
                 currentHeroName = heroName,
                 currentOriginalSkinName = originalSkinName,
                 currentReplacementSkinName = replacementSkinName,
+                suggestedHeroName = suggestedHeroName,
                 allHeroes = allHeroes,
                 skinsForSelectedHero = skinsForSelectedHero,
                 onHeroNameChanged = { viewModel.loadSkinsForHeroName(it) },
@@ -457,6 +459,7 @@ private fun ClassifyBottomSheet(
     currentHeroName: String?,
     currentOriginalSkinName: String?,
     currentReplacementSkinName: String?,
+    suggestedHeroName: String?,
     allHeroes: List<com.istarvin.skinscriptinstaller.data.db.entity.Hero>,
     skinsForSelectedHero: List<com.istarvin.skinscriptinstaller.data.db.entity.Skin>,
     onHeroNameChanged: (String) -> Unit,
@@ -465,7 +468,8 @@ private fun ClassifyBottomSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    var heroText by remember { mutableStateOf(currentHeroName ?: "") }
+    var heroText by remember { mutableStateOf(currentHeroName ?: suggestedHeroName ?: "") }
+    val wasAutoDetected = remember { currentHeroName == null && suggestedHeroName != null }
     var originalSkinText by remember { mutableStateOf(currentOriginalSkinName ?: "") }
     var replacementSkinText by remember { mutableStateOf(currentReplacementSkinName ?: "") }
 
@@ -531,6 +535,7 @@ private fun ClassifyBottomSheet(
             )
 
             // Hero field
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             ExposedDropdownMenuBox(
                 expanded = heroExpanded && filteredHeroes.isNotEmpty(),
                 onExpandedChange = { heroExpanded = it }
@@ -583,6 +588,14 @@ private fun ClassifyBottomSheet(
                     }
                 }
             }
+            if (wasAutoDetected && heroText == suggestedHeroName) {
+                Text(
+                    text = "Auto-detected from script name",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                )
+            }
+            } // end hero Column
 
             // Original Skin field
             ExposedDropdownMenuBox(

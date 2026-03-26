@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -76,6 +77,11 @@ class ScriptDetailViewModel @Inject constructor(
 
     val allHeroes: StateFlow<List<Hero>> = repository.getAllHeroes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val suggestedHeroName: StateFlow<String?> = combine(_script, allHeroes) { script, heroes ->
+        if (script == null || heroes.isEmpty()) null
+        else inferHeroFromScriptName(script.name, heroes)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _skinsForSelectedHero = MutableStateFlow<List<Skin>>(emptyList())
     val skinsForSelectedHero: StateFlow<List<Skin>> = _skinsForSelectedHero.asStateFlow()
@@ -376,6 +382,28 @@ class ScriptDetailViewModel @Inject constructor(
         } else {
             skins
         }
+    }
+
+    private fun inferHeroFromScriptName(scriptName: String, heroes: List<Hero>): String? {
+        // Strip parenthetical/bracket suffixes (e.g. "(SFILE.MOBI)"), normalise to lowercase words
+        val normalized = scriptName
+            .replace(Regex("\\([^)]*\\)"), " ")
+            .replace(Regex("\\[[^]]*]"), " ")
+            .replace(Regex("[^a-zA-Z0-9\\s]"), " ")
+            .lowercase()
+        // Sort longest names first so multi-word heroes (e.g. "Yi Sun-shin") beat subsets (e.g. "Yi")
+        return heroes
+            .sortedByDescending { it.name.length }
+            .firstOrNull { hero ->
+                val heroNorm = hero.name
+                    .replace(Regex("[^a-zA-Z0-9\\s]"), " ")
+                    .lowercase()
+                    .trim()
+                val words = heroNorm.split(Regex("\\s+")).filter { it.isNotBlank() }
+                if (words.isEmpty()) return@firstOrNull false
+                val pattern = words.joinToString("\\s+") { Regex.escape(it) }
+                normalized.contains(Regex("\\b$pattern\\b"))
+            }?.name
     }
 
     private fun defaultSkinsForHero(heroId: Long): List<Skin> {
