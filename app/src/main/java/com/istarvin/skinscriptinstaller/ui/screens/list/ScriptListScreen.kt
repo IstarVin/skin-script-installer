@@ -263,24 +263,58 @@ fun ScriptListScreen(
 
         // Delete confirmation dialog
         scriptToDelete?.let { item ->
-            AlertDialog(
-                onDismissRequest = { scriptToDelete = null },
-                title = { Text("Delete Script") },
-                text = { Text("Delete \"${item.script.name}\"? This will remove the imported files.") },
-                confirmButton = {
-                    TextButton(onClick = {
-                        viewModel.deleteScript(item.script)
-                        scriptToDelete = null
-                    }) {
-                        Text("Delete")
+            if (item.status == "installed") {
+                AlertDialog(
+                    onDismissRequest = { scriptToDelete = null },
+                    title = { Text("Delete Installed Script") },
+                    text = {
+                        Text(
+                            "Restore original files before deleting \"${item.script.name}\"? " +
+                                    "If you skip restore, current modified files stay on your device."
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.deleteScript(item.script, restoreBeforeDelete = true)
+                            scriptToDelete = null
+                        }) {
+                            Text("Restore and Delete")
+                        }
+                    },
+                    dismissButton = {
+                        Row {
+                            TextButton(onClick = {
+                                viewModel.deleteScript(item.script, restoreBeforeDelete = false)
+                                scriptToDelete = null
+                            }) {
+                                Text("Delete Without Restore")
+                            }
+                            TextButton(onClick = { scriptToDelete = null }) {
+                                Text("Cancel")
+                            }
+                        }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = { scriptToDelete = null }) {
-                        Text("Cancel")
+                )
+            } else {
+                AlertDialog(
+                    onDismissRequest = { scriptToDelete = null },
+                    title = { Text("Delete Script") },
+                    text = { Text("Delete \"${item.script.name}\"? This will remove the imported files.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.deleteScript(item.script)
+                            scriptToDelete = null
+                        }) {
+                            Text("Delete")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { scriptToDelete = null }) {
+                            Text("Cancel")
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     }
 }

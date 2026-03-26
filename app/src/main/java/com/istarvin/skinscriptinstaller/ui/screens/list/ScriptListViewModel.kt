@@ -7,6 +7,7 @@ import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.service.InvalidPasswordException
 import com.istarvin.skinscriptinstaller.service.PasswordRequiredException
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,7 +36,8 @@ data class ZipPasswordPrompt(
 @HiltViewModel
 class ScriptListViewModel @Inject constructor(
     private val repository: ScriptRepository,
-    private val importScriptUseCase: ImportScriptUseCase
+    private val importScriptUseCase: ImportScriptUseCase,
+    private val restoreScriptUseCase: RestoreScriptUseCase
 ) : ViewModel() {
 
     private val scripts: StateFlow<List<SkinScript>> = repository.getAllScripts()
@@ -122,8 +124,25 @@ class ScriptListViewModel @Inject constructor(
         }
     }
 
-    fun deleteScript(script: SkinScript) {
+    fun deleteScript(script: SkinScript, restoreBeforeDelete: Boolean = false) {
         viewModelScope.launch {
+            _importError.value = null
+
+            if (restoreBeforeDelete) {
+                val latestInstallation = repository.getLatestInstallation(script.id)
+                if (latestInstallation == null || latestInstallation.status != "installed") {
+                    _importError.value = "No active installation found to restore"
+                    return@launch
+                }
+
+                restoreScriptUseCase.resetProgress()
+                val restoreResult = restoreScriptUseCase.execute(latestInstallation.id)
+                restoreResult.onFailure { e ->
+                    _importError.value = e.message ?: "Restore failed"
+                    return@launch
+                }
+            }
+
             // Delete from DB
             repository.deleteScript(script)
             // Delete files from internal storage
