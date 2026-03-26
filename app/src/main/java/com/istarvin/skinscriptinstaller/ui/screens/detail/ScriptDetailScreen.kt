@@ -1,6 +1,7 @@
 package com.istarvin.skinscriptinstaller.ui.screens.detail
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,10 +15,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,10 +37,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import java.text.SimpleDateFormat
@@ -54,6 +62,8 @@ fun ScriptDetailScreen(
     val fileTree by viewModel.fileTree.collectAsState()
     val expandedDirectoryIds by viewModel.expandedDirectoryIds.collectAsState()
     val isOperating by viewModel.isOperating.collectAsState()
+    val eligibleUserIds by viewModel.eligibleUserIds.collectAsState()
+    val selectedUserId by viewModel.selectedUserId.collectAsState()
     val installProgress by viewModel.installProgress.collectAsState()
     val restoreProgress by viewModel.restoreProgress.collectAsState()
     val isShizukuReady by viewModel.isShizukuReady.collectAsState()
@@ -140,17 +150,91 @@ fun ScriptDetailScreen(
 
             // Action buttons
             item {
+                val canInstall = !isOperating && isShizukuReady &&
+                        installation?.status != "installed" && eligibleUserIds.isNotEmpty()
+                val showUserDropdown = eligibleUserIds.size > 1
+                var isUserMenuExpanded by remember { mutableStateOf(false) }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Button(
-                        onClick = { viewModel.install() },
-                        enabled = !isOperating && isShizukuReady &&
-                                installation?.status != "installed",
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Install")
+                    if (showUserDropdown) {
+                        Row(modifier = Modifier.weight(1f)) {
+                            Button(
+                                onClick = { viewModel.install() },
+                                enabled = canInstall,
+                                modifier = Modifier
+                                    .weight(0.8f)
+                                    .clip(
+                                        RoundedCornerShape(
+                                            topStart = 999.dp,
+                                            bottomStart = 999.dp,
+                                            topEnd = 0.dp,
+                                            bottomEnd = 0.dp
+                                        )
+                                    ),
+                                shape = RoundedCornerShape(
+                                    topStart = 999.dp,
+                                    bottomStart = 999.dp,
+                                    topEnd = 0.dp,
+                                    bottomEnd = 0.dp
+                                )
+                            ) {
+                                Text("Install (User $selectedUserId)")
+                            }
+
+                            Box(modifier = Modifier.weight(0.2f)) {
+                                Button(
+                                    onClick = { isUserMenuExpanded = true },
+                                    enabled = canInstall,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(
+                                            RoundedCornerShape(
+                                                topStart = 0.dp,
+                                                bottomStart = 0.dp,
+                                                topEnd = 999.dp,
+                                                bottomEnd = 999.dp
+                                            )
+                                        ),
+                                    shape = RoundedCornerShape(
+                                        topStart = 0.dp,
+                                        bottomStart = 0.dp,
+                                        topEnd = 999.dp,
+                                        bottomEnd = 999.dp
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.ArrowDropDown,
+                                        contentDescription = "Choose install user"
+                                    )
+                                }
+
+                                DropdownMenu(
+                                    expanded = isUserMenuExpanded,
+                                    onDismissRequest = { isUserMenuExpanded = false }
+                                ) {
+                                    eligibleUserIds.forEach { userId ->
+                                        DropdownMenuItem(
+                                            text = { Text("User $userId") },
+                                            onClick = {
+                                                viewModel.selectInstallUser(userId)
+                                                isUserMenuExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Button(
+                            onClick = { viewModel.install() },
+                            enabled = canInstall,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Install (User $selectedUserId)")
+                        }
                     }
 
                     OutlinedButton(
@@ -176,6 +260,23 @@ fun ScriptDetailScreen(
                     ) {
                         Text(
                             text = "⚠ Shizuku is not ready. Open Settings to connect.",
+                            modifier = Modifier.padding(12.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+
+                if (isShizukuReady && eligibleUserIds.isEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "No Mobile Legends user found in /storage/emulated",
                             modifier = Modifier.padding(12.dp),
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             style = MaterialTheme.typography.bodySmall

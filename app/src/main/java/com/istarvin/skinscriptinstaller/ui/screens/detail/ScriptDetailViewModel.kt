@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -34,7 +35,7 @@ class ScriptDetailViewModel @Inject constructor(
     private val repository: ScriptRepository,
     private val installScriptUseCase: InstallScriptUseCase,
     private val restoreScriptUseCase: RestoreScriptUseCase,
-    shizukuManager: ShizukuManager
+    private val shizukuManager: ShizukuManager
 ) : ViewModel() {
 
     private val scriptId: Long = savedStateHandle["scriptId"] ?: -1L
@@ -57,6 +58,12 @@ class ScriptDetailViewModel @Inject constructor(
     private val _isOperating = MutableStateFlow(false)
     val isOperating: StateFlow<Boolean> = _isOperating.asStateFlow()
 
+    private val _eligibleUserIds = MutableStateFlow<List<Int>>(emptyList())
+    val eligibleUserIds: StateFlow<List<Int>> = _eligibleUserIds.asStateFlow()
+
+    private val _selectedUserId = MutableStateFlow(0)
+    val selectedUserId: StateFlow<Int> = _selectedUserId.asStateFlow()
+
     val installProgress: StateFlow<InstallProgress?> = installScriptUseCase.progress
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -68,6 +75,45 @@ class ScriptDetailViewModel @Inject constructor(
 
     init {
         loadScript()
+        observeFileService()
+    }
+
+    private fun observeFileService() {
+        viewModelScope.launch {
+            shizukuManager.fileService.collectLatest {
+                refreshEligibleUsers()
+            }
+        }
+    }
+
+    private fun refreshEligibleUsers() {
+        val service = shizukuManager.fileService.value
+        if (service == null) {
+            _eligibleUserIds.value = emptyList()
+            _selectedUserId.value = 0
+            return
+        }
+
+        val detected = try {
+            service.listEligibleMlUserIds().toList().distinct().sorted()
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        _eligibleUserIds.value = detected
+
+        _selectedUserId.value = when {
+            detected.isEmpty() -> 0
+            _selectedUserId.value in detected -> _selectedUserId.value
+            0 in detected -> 0
+            else -> detected.first()
+        }
+    }
+
+    fun selectInstallUser(userId: Int) {
+        if (userId in _eligibleUserIds.value) {
+            _selectedUserId.value = userId
+        }
     }
 
     private fun loadScript() {
@@ -143,11 +189,16 @@ class ScriptDetailViewModel @Inject constructor(
 
     fun install() {
         viewModelScope.launch {
+            if (_eligibleUserIds.value.isEmpty()) {
+                _error.value = "No Mobile Legends user found in /storage/emulated"
+                return@launch
+            }
+
             _isOperating.value = true
             _error.value = null
             installScriptUseCase.resetProgress()
 
-            val result = installScriptUseCase.execute(scriptId)
+            val result = installScriptUseCase.execute(scriptId, _selectedUserId.value)
             result.onSuccess {
                 _installation.value = it
             }.onFailure { e ->

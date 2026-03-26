@@ -10,5 +10,6 @@ interface IFileService {
     List<String> listFiles(String path) = 4;
     boolean mkdirs(String path) = 5;
     boolean exists(String path) = 6;
+    int[] listEligibleMlUserIds() = 7;
 }
 

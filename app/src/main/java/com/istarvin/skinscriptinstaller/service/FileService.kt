@@ -10,6 +10,10 @@ import java.io.File
  */
 class FileService : IFileService.Stub() {
 
+    companion object {
+        private const val ML_PACKAGE_RELATIVE_PATH = "Android/data/com.mobile.legends"
+    }
+
     override fun destroy() {
         System.exit(0)
     }
@@ -68,6 +72,28 @@ class FileService : IFileService.Stub() {
         } catch (e: Exception) {
             e.printStackTrace()
             false
+        }
+    }
+
+    override fun listEligibleMlUserIds(): IntArray {
+        return try {
+            val emulatedRoot = File("/storage/emulated")
+            emulatedRoot
+                .listFiles()
+                .orEmpty()
+                .asSequence()
+                .filter { it.isDirectory }
+                .mapNotNull { dir ->
+                    val userId = dir.name.toIntOrNull() ?: return@mapNotNull null
+                    val mlPackageDir = File(dir, ML_PACKAGE_RELATIVE_PATH)
+                    if (mlPackageDir.exists() && mlPackageDir.isDirectory) userId else null
+                }
+                .sorted()
+                .toList()
+                .toIntArray()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            intArrayOf()
         }
     }
 }

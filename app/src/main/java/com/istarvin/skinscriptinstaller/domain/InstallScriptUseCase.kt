@@ -26,13 +26,12 @@ class InstallScriptUseCase @Inject constructor(
 ) {
     companion object {
         private const val ML_ASSETS_REL = "Android/data/com.mobile.legends/files/dragon2017/assets"
-        private const val ML_ASSETS_ABS = "/storage/emulated/0/$ML_ASSETS_REL"
     }
 
     private val _progress = MutableStateFlow<InstallProgress?>(null)
     val progress: StateFlow<InstallProgress?> = _progress.asStateFlow()
 
-    suspend fun execute(scriptId: Long): Result<Installation> = withContext(Dispatchers.IO) {
+    suspend fun execute(scriptId: Long, userId: Int = 0): Result<Installation> = withContext(Dispatchers.IO) {
         try {
             val script = repository.getScriptById(scriptId)
                 ?: return@withContext Result.failure(Exception("Script not found"))
@@ -65,10 +64,12 @@ class InstallScriptUseCase @Inject constructor(
 
             val installedFiles = mutableListOf<InstalledFile>()
 
+            val targetAssetsRoot = buildAssetsPath(userId)
+
             filesToInstall.forEachIndexed { index, sourceFile ->
                 // Calculate relative path from the assets dir
                 val relPath = sourceFile.relativeTo(assetsDir).path
-                val destPath = "$ML_ASSETS_ABS/$relPath"
+                val destPath = "$targetAssetsRoot/$relPath"
 
                 _progress.value = InstallProgress(
                     currentIndex = index + 1,
@@ -157,6 +158,10 @@ class InstallScriptUseCase @Inject constructor(
                 result.add(file)
             }
         }
+    }
+
+    private fun buildAssetsPath(userId: Int): String {
+        return "/storage/emulated/$userId/$ML_ASSETS_REL"
     }
 }
 
