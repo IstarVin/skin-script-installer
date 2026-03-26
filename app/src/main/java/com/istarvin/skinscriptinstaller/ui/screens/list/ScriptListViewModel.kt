@@ -11,6 +11,7 @@ import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
 import com.istarvin.skinscriptinstaller.service.InvalidPasswordException
 import com.istarvin.skinscriptinstaller.service.PasswordRequiredException
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
@@ -34,6 +35,7 @@ data class ScriptWithStatus(
     val script: SkinScript,
     val latestInstallation: Installation? = null,
     val heroName: String? = null,
+    val heroIcon: String? = null,
     val originalSkinName: String? = null,
     val replacementSkinName: String? = null
 ) {
@@ -71,6 +73,7 @@ data class SkinReplacementSection(
 data class HeroScriptGroup(
     val key: String,
     val title: String,
+    val heroIcon: String? = null,
     val skinReplacementGroups: List<SkinReplacementGroup> = emptyList(),
     val flatScripts: List<ScriptWithStatus> = emptyList(),
     val isFlat: Boolean = false
@@ -82,6 +85,7 @@ data class HeroScriptGroup(
 data class HeroScriptSection(
     val key: String,
     val title: String,
+    val heroIcon: String? = null,
     val skinReplacementSections: List<SkinReplacementSection> = emptyList(),
     val flatScripts: List<ScriptWithStatus> = emptyList(),
     val isFlat: Boolean = false,
@@ -98,7 +102,8 @@ class ScriptListViewModel @Inject constructor(
     private val importScriptUseCase: ImportScriptUseCase,
     private val restoreScriptUseCase: RestoreScriptUseCase,
     private val activeUserStore: ActiveUserStore,
-    private val shizukuManager: ShizukuManager
+    private val shizukuManager: ShizukuManager,
+    private val fetchHeroCatalogUseCase: FetchHeroCatalogUseCase
 ) : ViewModel() {
 
     private var didInitializeExpandedSections = false
@@ -138,6 +143,7 @@ class ScriptListViewModel @Inject constructor(
                         script = script,
                         latestInstallation = latestByScriptId[script.id],
                         heroName = hero?.name,
+                        heroIcon = hero?.heroIcon,
                         originalSkinName = originalSkin?.name,
                         replacementSkinName = replacementSkin?.name
                     )
@@ -158,6 +164,7 @@ class ScriptListViewModel @Inject constructor(
             HeroScriptSection(
                 key = group.key,
                 title = group.title,
+                heroIcon = group.heroIcon,
                 skinReplacementSections = group.skinReplacementGroups.map { replGroup ->
                     SkinReplacementSection(
                         key = replGroup.key,
@@ -185,6 +192,11 @@ class ScriptListViewModel @Inject constructor(
     init {
         observeEligibleUsers()
         observeHeroSections()
+        viewModelScope.launch {
+            if (repository.getHeroCount() == 0) {
+                fetchHeroCatalogUseCase.execute()
+            }
+        }
     }
 
     private fun observeHeroSections() {
@@ -372,6 +384,7 @@ class ScriptListViewModel @Inject constructor(
                     HeroScriptGroup(
                         key = heroKey,
                         title = "Uncategorized",
+                        heroIcon = null,
                         flatScripts = scriptsForHero,
                         isFlat = true
                     )
@@ -389,6 +402,7 @@ class ScriptListViewModel @Inject constructor(
                     HeroScriptGroup(
                         key = heroKey,
                         title = heroKey,
+                        heroIcon = scriptsForHero.firstOrNull()?.heroIcon,
                         skinReplacementGroups = replacementGroups,
                         isFlat = false
                     )

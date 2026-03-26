@@ -3,6 +3,7 @@ package com.istarvin.skinscriptinstaller.ui.screens.settings
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
 import com.istarvin.skinscriptinstaller.domain.backup.ExportAppDataBackupUseCase
 import com.istarvin.skinscriptinstaller.domain.backup.ImportAppDataBackupUseCase
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
@@ -17,7 +18,8 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val shizukuManager: ShizukuManager,
     private val exportAppDataBackupUseCase: ExportAppDataBackupUseCase,
-    private val importAppDataBackupUseCase: ImportAppDataBackupUseCase
+    private val importAppDataBackupUseCase: ImportAppDataBackupUseCase,
+    private val fetchHeroCatalogUseCase: FetchHeroCatalogUseCase
 ) : ViewModel() {
 
     val isShizukuAvailable: StateFlow<Boolean> = shizukuManager.isShizukuAvailable
@@ -29,6 +31,12 @@ class SettingsViewModel @Inject constructor(
 
     private val _backupMessage = MutableStateFlow<String?>(null)
     val backupMessage: StateFlow<String?> = _backupMessage.asStateFlow()
+
+    private val _isRefreshingCatalog = MutableStateFlow(false)
+    val isRefreshingCatalog: StateFlow<Boolean> = _isRefreshingCatalog.asStateFlow()
+
+    private val _catalogRefreshMessage = MutableStateFlow<String?>(null)
+    val catalogRefreshMessage: StateFlow<String?> = _catalogRefreshMessage.asStateFlow()
 
     fun requestPermission() {
         shizukuManager.requestPermission()
@@ -76,6 +84,23 @@ class SettingsViewModel @Inject constructor(
 
     fun clearBackupMessage() {
         _backupMessage.value = null
+    }
+
+    fun refreshHeroCatalog() {
+        viewModelScope.launch {
+            _isRefreshingCatalog.value = true
+            _catalogRefreshMessage.value = null
+            val result = fetchHeroCatalogUseCase.execute()
+            _catalogRefreshMessage.value = result.fold(
+                onSuccess = { count -> "Synced $count heroes" },
+                onFailure = { it.message ?: "Failed to fetch hero catalog" }
+            )
+            _isRefreshingCatalog.value = false
+        }
+    }
+
+    fun clearCatalogRefreshMessage() {
+        _catalogRefreshMessage.value = null
     }
 }
 

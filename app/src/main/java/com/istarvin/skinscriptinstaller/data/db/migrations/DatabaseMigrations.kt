@@ -4,7 +4,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 object DatabaseMigrations {
-    val availablePaths: Set<Pair<Int, Int>> = setOf(1 to 2, 2 to 3)
+    val availablePaths: Set<Pair<Int, Int>> = setOf(1 to 2, 2 to 3, 3 to 4)
 
     val MIGRATION_1_2 = object : Migration(1, 2) {
         override fun migrate(db: SupportSQLiteDatabase) {
@@ -65,6 +65,12 @@ object DatabaseMigrations {
             db.execSQL(
                 "CREATE INDEX IF NOT EXISTS index_skin_scripts_replacementSkinId ON skin_scripts(replacementSkinId)"
             )
+        }
+    }
+
+    val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE heroes ADD COLUMN heroIcon TEXT")
         }
     }
 }

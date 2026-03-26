@@ -364,16 +364,25 @@ class ScriptDetailViewModel @Inject constructor(
                 loadSkinsForHero(hero.id)
             } else {
                 // New hero — show the default skins that will be auto-created
-                _skinsForSelectedHero.value = listOf(
-                    Skin(id = 0, heroId = 0, name = "Default"),
-                    Skin(id = 0, heroId = 0, name = "Basic")
-                )
+                _skinsForSelectedHero.value = defaultSkinsForHero(heroId = 0)
             }
         }
     }
 
     private suspend fun loadSkinsForHero(heroId: Long) {
-        _skinsForSelectedHero.value = repository.getSkinsByHeroIdOnce(heroId)
+        val skins = repository.getSkinsByHeroIdOnce(heroId)
+        _skinsForSelectedHero.value = if (skins.isEmpty()) {
+            defaultSkinsForHero(heroId)
+        } else {
+            skins
+        }
+    }
+
+    private fun defaultSkinsForHero(heroId: Long): List<Skin> {
+        return listOf(
+            Skin(heroId = heroId, name = "Default"),
+            Skin(heroId = heroId, name = "Basic")
+        )
     }
 
     fun classifyScript(heroName: String, originalSkinName: String, replacementSkinName: String) {

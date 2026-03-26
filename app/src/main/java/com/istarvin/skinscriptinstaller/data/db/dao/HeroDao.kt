@@ -27,6 +27,15 @@ interface HeroDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllReplace(heroes: List<Hero>)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAllIgnore(heroes: List<Hero>)
+
+    @Query("SELECT COUNT(*) FROM heroes")
+    suspend fun count(): Int
+
+    @Query("UPDATE heroes SET heroIcon = :heroIcon WHERE name = :name")
+    suspend fun updateHeroIconByName(name: String, heroIcon: String)
+
     @Query("DELETE FROM heroes")
     suspend fun clearAll()
 }

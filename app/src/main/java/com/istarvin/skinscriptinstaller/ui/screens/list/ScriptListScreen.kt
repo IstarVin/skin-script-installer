@@ -20,13 +20,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.FolderZip
 import androidx.compose.material.icons.outlined.DriveFolderUpload
@@ -62,9 +63,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import coil3.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -531,18 +534,31 @@ private fun HeroScriptAccordionSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = section.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = if (section.count == 1) "1 skin script" else "${section.count} skin scripts",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Row(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (!section.isFlat) {
+                    HeroSectionIcon(
+                        heroName = section.title,
+                        heroIcon = section.heroIcon
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = section.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (section.count == 1) "1 skin script" else "${section.count} skin scripts",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
 
             Icon(
@@ -592,6 +608,33 @@ private fun HeroScriptAccordionSection(
     }
 }
 
+@Composable
+private fun HeroSectionIcon(
+    heroName: String,
+    heroIcon: String?,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(36.dp)
+            .clip(CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Person,
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (!heroIcon.isNullOrBlank()) {
+            AsyncImage(
+                model = heroIcon,
+                contentDescription = "$heroName icon",
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
+}
 @Composable
 private fun SkinReplacementAccordionSection(
     section: SkinReplacementSection,

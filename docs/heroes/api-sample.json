@@ -1,0 +1,32 @@
+{
+  "code": 0,
+  "message": "OK",
+  "data": {
+    "records": [
+      {
+        "data": {
+          "hero": {
+            "data": {
+              "head": "https://akmweb.youngjoygame.com/web/svnres/img/mlbb/homepage_2_1_42/100_df7603c292198bf4aa7b551d401ea5c1.png",
+              "name": "Marcel",
+              "smallmap": "https://akmweb.youngjoygame.com/web/svnres/img/mlbb/homepage_2_1_42/100_82e5c2646276cd907f69cc800057c737.png"
+            }
+          },
+          "hero_id": 132,
+          "relation": {
+            "assist": {
+              "target_hero_id": [60, 121]
+            },
+            "strong": {
+              "target_hero_id": [18, 38]
+            },
+            "weak": {
+              "target_hero_id": [84, 83]
+            }
+          }
+        }
+      }
+    ],
+    "total": 132
+  }
+}

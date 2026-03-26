@@ -92,6 +92,19 @@ class ScriptRepository @Inject constructor(
 
     suspend fun insertHero(hero: Hero): Long = heroDao.insert(hero)
 
+    suspend fun getHeroCount(): Int = heroDao.count()
+
+    suspend fun syncHeroCatalog(items: List<Pair<String, String>>) {
+        if (items.isEmpty()) return
+        appDatabase.withTransaction {
+            val heroes = items.map { (name, _) -> Hero(name = name) }
+            heroDao.insertAllIgnore(heroes)
+            items.forEach { (name, iconUrl) ->
+                heroDao.updateHeroIconByName(name, iconUrl)
+            }
+        }
+    }
+
     // --- Skin ---
 
     fun getSkinsByHeroId(heroId: Long): Flow<List<Skin>> = skinDao.getByHeroId(heroId)

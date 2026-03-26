@@ -20,7 +20,7 @@ import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 )
 abstract class AppDatabase : RoomDatabase() {
     companion object {
-        const val DATABASE_VERSION = 3
+        const val DATABASE_VERSION = 4
     }
 
     abstract fun skinScriptDao(): SkinScriptDao

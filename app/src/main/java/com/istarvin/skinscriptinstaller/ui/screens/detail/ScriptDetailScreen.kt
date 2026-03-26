@@ -2,6 +2,7 @@ package com.istarvin.skinscriptinstaller.ui.screens.detail
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +20,8 @@ import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Person
+import coil3.compose.AsyncImage
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -482,14 +485,24 @@ private fun ClassifyBottomSheet(
         else skinsForSelectedHero.filter { it.name.contains(originalSkinText, ignoreCase = true) }
     }
 
-    val filteredReplacementSkins = remember(replacementSkinText, skinsForSelectedHero) {
-        if (replacementSkinText.isBlank()) skinsForSelectedHero
-        else skinsForSelectedHero.filter { it.name.contains(replacementSkinText, ignoreCase = true) }
+    val replacementCandidateSkins = remember(originalSkinText, skinsForSelectedHero) {
+        val selectedOriginal = originalSkinText.trim()
+        if (selectedOriginal.isBlank()) {
+            skinsForSelectedHero
+        } else {
+            skinsForSelectedHero.filterNot { it.name.equals(selectedOriginal, ignoreCase = true) }
+        }
+    }
+
+    val filteredReplacementSkins = remember(replacementSkinText, replacementCandidateSkins) {
+        if (replacementSkinText.isBlank()) replacementCandidateSkins
+        else replacementCandidateSkins.filter { it.name.contains(replacementSkinText, ignoreCase = true) }
     }
 
     val canConfirm = heroText.isNotBlank() &&
             originalSkinText.isNotBlank() &&
-            replacementSkinText.isNotBlank()
+            replacementSkinText.isNotBlank() &&
+            !originalSkinText.trim().equals(replacementSkinText.trim(), ignoreCase = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -536,7 +549,27 @@ private fun ClassifyBottomSheet(
                 ) {
                     filteredHeroes.forEach { hero ->
                         DropdownMenuItem(
-                            text = { Text(hero.name) },
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(modifier = Modifier.size(32.dp)) {
+                                        Icon(
+                                            imageVector = Icons.Default.Person,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize(),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        AsyncImage(
+                                            model = hero.heroIcon,
+                                            contentDescription = null,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                    Text(hero.name)
+                                }
+                            },
                             onClick = {
                                 heroText = hero.name
                                 heroExpanded = false
@@ -555,6 +588,9 @@ private fun ClassifyBottomSheet(
                     value = originalSkinText,
                     onValueChange = {
                         originalSkinText = it
+                        if (replacementSkinText.equals(it.trim(), ignoreCase = true)) {
+                            replacementSkinText = ""
+                        }
                         originalSkinExpanded = true
                     },
                     label = { Text("Original Skin (being replaced)") },
@@ -573,6 +609,9 @@ private fun ClassifyBottomSheet(
                             text = { Text(skin.name) },
                             onClick = {
                                 originalSkinText = skin.name
+                                if (replacementSkinText.equals(skin.name, ignoreCase = true)) {
+                                    replacementSkinText = ""
+                                }
                                 originalSkinExpanded = false
                             }
                         )

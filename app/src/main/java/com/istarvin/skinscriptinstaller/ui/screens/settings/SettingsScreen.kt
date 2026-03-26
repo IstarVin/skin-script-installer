@@ -53,6 +53,8 @@ fun SettingsScreen(
     val isServiceBound by viewModel.isServiceBound.collectAsState()
     val isBackupOperationRunning by viewModel.isBackupOperationRunning.collectAsState()
     val backupMessage by viewModel.backupMessage.collectAsState()
+    val isRefreshingCatalog by viewModel.isRefreshingCatalog.collectAsState()
+    val catalogRefreshMessage by viewModel.catalogRefreshMessage.collectAsState()
 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss") }
     val exportLauncher = rememberLauncherForActivityResult(
@@ -248,6 +250,56 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = if (backupMessage?.contains("failed", ignoreCase = true) == true ||
                                 backupMessage?.contains("incompatible", ignoreCase = true) == true
+                            ) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                    }
+                }
+            }
+
+            // Hero Catalog Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Hero Catalog",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Fetch the latest hero list from the MLBB stats API.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = { viewModel.refreshHeroCatalog() },
+                        enabled = !isRefreshingCatalog,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Refresh Hero Catalog")
+                    }
+                    AnimatedVisibility(visible = isRefreshingCatalog) {
+                        Column(modifier = Modifier.padding(top = 12.dp)) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Fetching hero catalog...",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                    AnimatedVisibility(visible = catalogRefreshMessage != null) {
+                        Text(
+                            text = catalogRefreshMessage.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (catalogRefreshMessage?.contains("failed", ignoreCase = true) == true ||
+                                catalogRefreshMessage?.contains("error", ignoreCase = true) == true
                             ) {
                                 MaterialTheme.colorScheme.error
                             } else {
