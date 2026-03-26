@@ -2,7 +2,6 @@ package com.istarvin.skinscriptinstaller.domain
 
 import android.content.Context
 import android.os.ParcelFileDescriptor
-import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
 import dagger.hilt.android.qualifiers.ApplicationContext
