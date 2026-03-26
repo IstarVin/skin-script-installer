@@ -200,7 +200,7 @@ fun ScriptListScreen(
                     items(heroScriptSections, key = { it.key }) { section ->
                         HeroScriptAccordionSection(
                             section = section,
-                            onToggle = { viewModel.toggleHeroSection(section.key) },
+                            onToggle = viewModel::toggleSection,
                             onScriptClick = onScriptClick,
                             onDeleteClick = { scriptToDelete = it }
                         )
@@ -510,7 +510,7 @@ private fun ScriptCard(
 @Composable
 private fun HeroScriptAccordionSection(
     section: HeroScriptSection,
-    onToggle: () -> Unit,
+    onToggle: (String) -> Unit,
     onScriptClick: (Long) -> Unit,
     onDeleteClick: (ScriptWithStatus) -> Unit
 ) {
@@ -526,7 +526,7 @@ private fun HeroScriptAccordionSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onToggle)
+                .clickable { onToggle(section.key) }
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -567,15 +567,142 @@ private fun HeroScriptAccordionSection(
                     .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                if (section.isFlat) {
+                    section.flatScripts.forEach { item ->
+                        ScriptCard(
+                            item = item,
+                            modifier = Modifier.padding(start = 8.dp),
+                            showHeroName = false,
+                            onClick = { onScriptClick(item.script.id) },
+                            onDeleteClick = { onDeleteClick(item) }
+                        )
+                    }
+                } else {
+                    section.skinReplacementSections.forEach { replSection ->
+                        SkinReplacementAccordionSection(
+                            section = replSection,
+                            onToggle = onToggle,
+                            onScriptClick = onScriptClick,
+                            onDeleteClick = onDeleteClick
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkinReplacementAccordionSection(
+    section: SkinReplacementSection,
+    onToggle: (String) -> Unit,
+    onScriptClick: (Long) -> Unit,
+    onDeleteClick: (ScriptWithStatus) -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onToggle(section.key) }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = section.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (section.count == 1) "1 skin script" else "${section.count} skin scripts",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Icon(
+                imageVector = if (section.isExpanded) {
+                    Icons.Default.ExpandLess
+                } else {
+                    Icons.Default.ExpandMore
+                },
+                contentDescription = if (section.isExpanded) {
+                    "Collapse ${section.title}"
+                } else {
+                    "Expand ${section.title}"
+                },
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (section.isExpanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 section.scripts.forEach { item ->
-                    ScriptCard(
+                    OldSkinItem(
                         item = item,
-                        modifier = Modifier.padding(start = 8.dp),
-                        showHeroName = false,
                         onClick = { onScriptClick(item.script.id) },
                         onDeleteClick = { onDeleteClick(item) }
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OldSkinItem(
+    item: ScriptWithStatus,
+    onClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = item.originalSkinName ?: "Unknown",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            StatusChip(status = item.status)
+
+            IconButton(onClick = onDeleteClick) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete",
+                    tint = MaterialTheme.colorScheme.outline
+                )
             }
         }
     }

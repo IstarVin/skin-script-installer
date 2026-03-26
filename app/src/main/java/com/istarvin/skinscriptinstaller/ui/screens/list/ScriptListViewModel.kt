@@ -27,6 +27,8 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 private const val UNCATEGORIZED_SECTION_KEY = "__uncategorized__"
+private const val UNKNOWN_REPLACEMENT_KEY = "__unknown_replacement__"
+private const val REPLACEMENT_KEY_SEPARATOR = "::"
 
 data class ScriptWithStatus(
     val script: SkinScript,
@@ -47,7 +49,7 @@ data class ZipPasswordPrompt(
     val errorMessage: String? = null
 )
 
-data class HeroScriptGroup(
+data class SkinReplacementGroup(
     val key: String,
     val title: String,
     val scripts: List<ScriptWithStatus>
@@ -56,7 +58,7 @@ data class HeroScriptGroup(
         get() = scripts.size
 }
 
-data class HeroScriptSection(
+data class SkinReplacementSection(
     val key: String,
     val title: String,
     val scripts: List<ScriptWithStatus>,
@@ -64,6 +66,29 @@ data class HeroScriptSection(
 ) {
     val count: Int
         get() = scripts.size
+}
+
+data class HeroScriptGroup(
+    val key: String,
+    val title: String,
+    val skinReplacementGroups: List<SkinReplacementGroup> = emptyList(),
+    val flatScripts: List<ScriptWithStatus> = emptyList(),
+    val isFlat: Boolean = false
+) {
+    val count: Int
+        get() = if (isFlat) flatScripts.size else skinReplacementGroups.sumOf { it.count }
+}
+
+data class HeroScriptSection(
+    val key: String,
+    val title: String,
+    val skinReplacementSections: List<SkinReplacementSection> = emptyList(),
+    val flatScripts: List<ScriptWithStatus> = emptyList(),
+    val isFlat: Boolean = false,
+    val isExpanded: Boolean
+) {
+    val count: Int
+        get() = if (isFlat) flatScripts.size else skinReplacementSections.sumOf { it.count }
 }
 
 @HiltViewModel
@@ -133,7 +158,16 @@ class ScriptListViewModel @Inject constructor(
             HeroScriptSection(
                 key = group.key,
                 title = group.title,
-                scripts = group.scripts,
+                skinReplacementSections = group.skinReplacementGroups.map { replGroup ->
+                    SkinReplacementSection(
+                        key = replGroup.key,
+                        title = replGroup.title,
+                        scripts = replGroup.scripts,
+                        isExpanded = replGroup.key in expandedKeys
+                    )
+                },
+                flatScripts = group.flatScripts,
+                isFlat = group.isFlat,
                 isExpanded = group.key in expandedKeys
             )
         }
@@ -156,19 +190,24 @@ class ScriptListViewModel @Inject constructor(
     private fun observeHeroSections() {
         viewModelScope.launch {
             heroScriptGroups.collect { groups ->
-                val groupKeys = groups.mapTo(linkedSetOf()) { it.key }
+                val allKeys = linkedSetOf<String>()
+                groups.forEach { group ->
+                    allKeys.add(group.key)
+                    group.skinReplacementGroups.forEach { replGroup ->
+                        allKeys.add(replGroup.key)
+                    }
+                }
                 val currentExpandedKeys = _expandedSectionKeys.value
                 val nextExpandedKeys = when {
-                    groupKeys.isEmpty() -> emptySet()
+                    allKeys.isEmpty() -> emptySet()
                     !didInitializeExpandedSections -> {
                         didInitializeExpandedSections = true
-                        groupKeys
+                        allKeys
                     }
 
                     else -> buildSet {
-                        currentExpandedKeys
-                            .filterTo(this) { it in groupKeys }
-                        addAll(groupKeys - currentExpandedKeys)
+                        currentExpandedKeys.filterTo(this) { it in allKeys }
+                        addAll(allKeys - currentExpandedKeys)
                     }
                 }
 
@@ -218,7 +257,7 @@ class ScriptListViewModel @Inject constructor(
         }
     }
 
-    fun toggleHeroSection(sectionKey: String) {
+    fun toggleSection(sectionKey: String) {
         _expandedSectionKeys.value = _expandedSectionKeys.value.toMutableSet().apply {
             if (!add(sectionKey)) {
                 remove(sectionKey)
@@ -328,12 +367,32 @@ class ScriptListViewModel @Inject constructor(
 
         return items
             .groupBy { item -> item.heroName ?: UNCATEGORIZED_SECTION_KEY }
-            .map { (key, scriptsForHero) ->
-                HeroScriptGroup(
-                    key = key,
-                    title = scriptsForHero.first().heroName ?: "Uncategorized",
-                    scripts = scriptsForHero
-                )
+            .map { (heroKey, scriptsForHero) ->
+                if (heroKey == UNCATEGORIZED_SECTION_KEY) {
+                    HeroScriptGroup(
+                        key = heroKey,
+                        title = "Uncategorized",
+                        flatScripts = scriptsForHero,
+                        isFlat = true
+                    )
+                } else {
+                    val replacementGroups = scriptsForHero
+                        .groupBy { it.replacementSkinName ?: UNKNOWN_REPLACEMENT_KEY }
+                        .map { (replKey, scriptsForReplacement) ->
+                            SkinReplacementGroup(
+                                key = "$heroKey$REPLACEMENT_KEY_SEPARATOR$replKey",
+                                title = scriptsForReplacement.first().replacementSkinName
+                                    ?: "Unknown",
+                                scripts = scriptsForReplacement
+                            )
+                        }
+                    HeroScriptGroup(
+                        key = heroKey,
+                        title = heroKey,
+                        skinReplacementGroups = replacementGroups,
+                        isFlat = false
+                    )
+                }
             }
     }
 }
