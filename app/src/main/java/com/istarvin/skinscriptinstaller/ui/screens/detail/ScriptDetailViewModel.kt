@@ -267,6 +267,58 @@ class ScriptDetailViewModel @Inject constructor(
         }
     }
 
+    fun reinstall() {
+        performReinstall(_selectedUserId.value)
+    }
+
+    fun reinstallForUser(userId: Int) {
+        if (userId !in _eligibleUserIds.value) {
+            _error.value = "Selected user is not eligible"
+            return
+        }
+        _selectedUserId.value = userId
+        performReinstall(userId)
+    }
+
+    private fun performReinstall(targetUserId: Int) {
+        viewModelScope.launch {
+            if (_eligibleUserIds.value.isEmpty()) {
+                _error.value = "No Mobile Legends user found in /storage/emulated"
+                return@launch
+            }
+
+            val inst = repository.getLatestInstallation(scriptId, targetUserId)
+
+            if (inst == null || inst.status != "installed") {
+                _error.value = "No installed version available to reinstall"
+                return@launch
+            }
+
+            activeUserStore.setActiveUser(targetUserId)
+
+            _isOperating.value = true
+            _error.value = null
+            restoreScriptUseCase.resetProgress()
+            installScriptUseCase.resetProgress()
+
+            val restoreResult = restoreScriptUseCase.execute(inst.id)
+            if (restoreResult.isFailure) {
+                _error.value = restoreResult.exceptionOrNull()?.message ?: "Reinstall failed during restore"
+                _isOperating.value = false
+                return@launch
+            }
+
+            val installResult = installScriptUseCase.execute(scriptId, targetUserId)
+            installResult.onSuccess {
+                _installation.value = it
+            }.onFailure { e ->
+                _error.value = e.message ?: "Reinstall failed during install"
+            }
+
+            _isOperating.value = false
+        }
+    }
+
     fun clearError() {
         _error.value = null
     }

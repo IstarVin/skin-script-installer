@@ -15,13 +15,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,17 +33,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import java.text.SimpleDateFormat
@@ -158,113 +149,28 @@ fun ScriptDetailScreen(
 
             // Action buttons
             item {
-                val canInstall = !isOperating && isShizukuReady &&
-                        installation?.status != "installed" && eligibleUserIds.isNotEmpty()
-                val showUserDropdown = eligibleUserIds.size > 1
-                var isUserMenuExpanded by remember { mutableStateOf(false) }
-                val dropdownRotation by animateFloatAsState(
-                    targetValue = if (isUserMenuExpanded) 180f else 0f,
-                    label = "installUserDropdownRotation"
-                )
+                val isInstalled = installation?.status == "installed"
+                val canPrimaryAction = !isOperating && isShizukuReady && eligibleUserIds.isNotEmpty()
+                val canRestore = !isOperating && isShizukuReady &&
+                    installation?.status == "installed"
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (showUserDropdown) {
-                        Row(modifier = Modifier.weight(1f)) {
-                            Button(
-                                onClick = { viewModel.install() },
-                                enabled = canInstall,
-                                modifier = Modifier
-                                    .weight(0.8f)
-                                    .clip(
-                                        RoundedCornerShape(
-                                            topStart = 999.dp,
-                                            bottomStart = 999.dp,
-                                            topEnd = 0.dp,
-                                            bottomEnd = 0.dp
-                                        )
-                                    ),
-                                shape = RoundedCornerShape(
-                                    topStart = 999.dp,
-                                    bottomStart = 999.dp,
-                                    topEnd = 0.dp,
-                                    bottomEnd = 0.dp
-                                )
-                            ) {
-                                Text("Install")
-                            }
-
-                            Box(modifier = Modifier.weight(0.2f)) {
-                                Button(
-                                    onClick = { isUserMenuExpanded = true },
-                                    enabled = canInstall,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(
-                                            RoundedCornerShape(
-                                                topStart = 0.dp,
-                                                bottomStart = 0.dp,
-                                                topEnd = 999.dp,
-                                                bottomEnd = 999.dp
-                                            )
-                                        ),
-                                    shape = RoundedCornerShape(
-                                        topStart = 0.dp,
-                                        bottomStart = 0.dp,
-                                        topEnd = 999.dp,
-                                        bottomEnd = 999.dp
-                                        ),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.primary,
-                                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                                            disabledContainerColor =
-                                                MaterialTheme.colorScheme.surfaceVariant,
-                                            disabledContentColor =
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.ArrowDropDown,
-                                        contentDescription = "Choose install user",
-                                            tint = MaterialTheme.colorScheme.onPrimary,
-                                        modifier = Modifier.graphicsLayer {
-                                            rotationZ = dropdownRotation
-                                        }
-                                    )
-                                }
-
-                                DropdownMenu(
-                                    expanded = isUserMenuExpanded,
-                                    onDismissRequest = { isUserMenuExpanded = false }
-                                ) {
-                                    eligibleUserIds.forEach { userId ->
-                                        DropdownMenuItem(
-                                            text = { Text("User $userId") },
-                                            onClick = {
-                                                isUserMenuExpanded = false
-                                                viewModel.installForUser(userId)
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Button(
-                            onClick = { viewModel.install() },
-                            enabled = canInstall,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Install")
-                        }
+                    Button(
+                        onClick = {
+                            if (isInstalled) viewModel.reinstall() else viewModel.install()
+                        },
+                        enabled = canPrimaryAction,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(if (isInstalled) "Reinstall" else "Install")
                     }
 
                     OutlinedButton(
                         onClick = { viewModel.restore() },
-                        enabled = !isOperating && isShizukuReady &&
-                                installation?.status == "installed",
+                        enabled = canRestore,
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.tertiary
