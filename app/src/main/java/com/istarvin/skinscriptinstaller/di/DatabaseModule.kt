@@ -3,8 +3,10 @@ package com.istarvin.skinscriptinstaller.di
 import android.content.Context
 import androidx.room.Room
 import com.istarvin.skinscriptinstaller.data.db.AppDatabase
+import com.istarvin.skinscriptinstaller.data.db.dao.HeroDao
 import com.istarvin.skinscriptinstaller.data.db.dao.InstalledFileDao
 import com.istarvin.skinscriptinstaller.data.db.dao.InstallationDao
+import com.istarvin.skinscriptinstaller.data.db.dao.SkinDao
 import com.istarvin.skinscriptinstaller.data.db.dao.SkinScriptDao
 import com.istarvin.skinscriptinstaller.data.db.migrations.DatabaseMigrations
 import dagger.Module
@@ -26,7 +28,10 @@ object DatabaseModule {
             AppDatabase::class.java,
             "skin_script_installer.db"
         )
-            .addMigrations(DatabaseMigrations.MIGRATION_1_2)
+            .addMigrations(
+                DatabaseMigrations.MIGRATION_1_2,
+                DatabaseMigrations.MIGRATION_2_3
+            )
             .build()
     }
 
@@ -38,5 +43,11 @@ object DatabaseModule {
 
     @Provides
     fun provideInstalledFileDao(db: AppDatabase): InstalledFileDao = db.installedFileDao()
+
+    @Provides
+    fun provideHeroDao(db: AppDatabase): HeroDao = db.heroDao()
+
+    @Provides
+    fun provideSkinDao(db: AppDatabase): SkinDao = db.skinDao()
 }
 

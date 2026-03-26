@@ -3,7 +3,7 @@ package com.istarvin.skinscriptinstaller.domain.backup
 import com.istarvin.skinscriptinstaller.data.db.AppDatabase
 
 object BackupCompatibilityRegistry {
-    const val CURRENT_BACKUP_FORMAT_VERSION = 1
+    const val CURRENT_BACKUP_FORMAT_VERSION = 2
 
     private val supportedRules = listOf(
         CompatibilityRule(
@@ -11,6 +11,12 @@ object BackupCompatibilityRegistry {
             minAppVersionCode = 2,
             maxAppVersionCode = Int.MAX_VALUE,
             supportedDatabaseVersions = setOf(1, 2)
+        ),
+        CompatibilityRule(
+            formatVersion = 2,
+            minAppVersionCode = 2,
+            maxAppVersionCode = Int.MAX_VALUE,
+            supportedDatabaseVersions = setOf(1, 2, 3)
         )
     )
 

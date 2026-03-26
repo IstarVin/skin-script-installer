@@ -3,7 +3,9 @@ package com.istarvin.skinscriptinstaller.ui.screens.list
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
+import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
@@ -25,10 +27,16 @@ import javax.inject.Inject
 
 data class ScriptWithStatus(
     val script: SkinScript,
-    val latestInstallation: Installation? = null
+    val latestInstallation: Installation? = null,
+    val heroName: String? = null,
+    val originalSkinName: String? = null,
+    val replacementSkinName: String? = null
 ) {
     val status: String
         get() = latestInstallation?.status ?: "not_installed"
+
+    val isClassified: Boolean
+        get() = heroName != null
 }
 
 data class ZipPasswordPrompt(
@@ -54,15 +62,33 @@ class ScriptListViewModel @Inject constructor(
     private val scripts: StateFlow<List<SkinScript>> = repository.getAllScripts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val heroes: StateFlow<List<Hero>> = repository.getAllHeroes()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val scriptsWithStatus: StateFlow<List<ScriptWithStatus>> = activeUserId
         .flatMapLatest { selectedUserId ->
             combine(
                 scripts,
-                repository.getLatestInstallations(selectedUserId)
-            ) { scriptList, latestInstallations ->
+                repository.getLatestInstallations(selectedUserId),
+                heroes
+            ) { scriptList, latestInstallations, heroList ->
                 val latestByScriptId = latestInstallations.associateBy { it.scriptId }
+                val heroById = heroList.associateBy { it.id }
                 scriptList.map { script ->
-                    ScriptWithStatus(script, latestByScriptId[script.id])
+                    val hero = script.heroId?.let { heroById[it] }
+                    val originalSkin = script.originalSkinId?.let { id ->
+                        repository.getSkinById(id)
+                    }
+                    val replacementSkin = script.replacementSkinId?.let { id ->
+                        repository.getSkinById(id)
+                    }
+                    ScriptWithStatus(
+                        script = script,
+                        latestInstallation = latestByScriptId[script.id],
+                        heroName = hero?.name,
+                        originalSkinName = originalSkin?.name,
+                        replacementSkinName = replacementSkin?.name
+                    )
                 }
             }
         }

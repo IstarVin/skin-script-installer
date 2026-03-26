@@ -11,6 +11,25 @@ object BackupJsonCodec {
             .put("appVersionCode", manifest.appVersionCode)
             .put("appVersionName", manifest.appVersionName)
             .put("databaseVersion", manifest.databaseVersion)
+            .put("heroes", JSONArray().apply {
+                manifest.heroes.forEach { hero ->
+                    put(
+                        JSONObject()
+                            .put("id", hero.id)
+                            .put("name", hero.name)
+                    )
+                }
+            })
+            .put("skins", JSONArray().apply {
+                manifest.skins.forEach { skin ->
+                    put(
+                        JSONObject()
+                            .put("id", skin.id)
+                            .put("heroId", skin.heroId)
+                            .put("name", skin.name)
+                    )
+                }
+            })
             .put("scripts", JSONArray().apply {
                 manifest.scripts.forEach { script ->
                     put(
@@ -19,6 +38,9 @@ object BackupJsonCodec {
                             .put("name", script.name)
                             .put("importedAt", script.importedAt)
                             .put("relativeStoragePath", script.relativeStoragePath)
+                            .put("heroId", script.heroId ?: JSONObject.NULL)
+                            .put("originalSkinId", script.originalSkinId ?: JSONObject.NULL)
+                            .put("replacementSkinId", script.replacementSkinId ?: JSONObject.NULL)
                     )
                 }
             })
@@ -54,12 +76,30 @@ object BackupJsonCodec {
     fun decode(rawJson: String): AppBackupManifest {
         val root = JSONObject(rawJson)
 
+        val heroes = root.optJSONArray("heroes")?.toList { item ->
+            HeroBackupRecord(
+                id = item.getLong("id"),
+                name = item.getString("name")
+            )
+        } ?: emptyList()
+
+        val skins = root.optJSONArray("skins")?.toList { item ->
+            SkinBackupRecord(
+                id = item.getLong("id"),
+                heroId = item.getLong("heroId"),
+                name = item.getString("name")
+            )
+        } ?: emptyList()
+
         val scripts = root.getJSONArray("scripts").toList { item ->
             SkinScriptBackupRecord(
                 id = item.getLong("id"),
                 name = item.getString("name"),
                 importedAt = item.getLong("importedAt"),
-                relativeStoragePath = item.getString("relativeStoragePath")
+                relativeStoragePath = item.getString("relativeStoragePath"),
+                heroId = item.optNullableLong("heroId"),
+                originalSkinId = item.optNullableLong("originalSkinId"),
+                replacementSkinId = item.optNullableLong("replacementSkinId")
             )
         }
 
@@ -93,7 +133,9 @@ object BackupJsonCodec {
             databaseVersion = root.getInt("databaseVersion"),
             scripts = scripts,
             installations = installations,
-            installedFiles = installedFiles
+            installedFiles = installedFiles,
+            heroes = heroes,
+            skins = skins
         )
     }
 
@@ -104,5 +146,9 @@ object BackupJsonCodec {
             result.add(block(obj))
         }
         return result
+    }
+
+    private fun JSONObject.optNullableLong(key: String): Long? {
+        return if (has(key) && !isNull(key)) getLong(key) else null
     }
 }

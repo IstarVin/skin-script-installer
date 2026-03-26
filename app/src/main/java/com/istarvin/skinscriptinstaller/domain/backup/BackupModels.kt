@@ -8,14 +8,19 @@ data class AppBackupManifest(
     val databaseVersion: Int,
     val scripts: List<SkinScriptBackupRecord>,
     val installations: List<InstallationBackupRecord>,
-    val installedFiles: List<InstalledFileBackupRecord>
+    val installedFiles: List<InstalledFileBackupRecord>,
+    val heroes: List<HeroBackupRecord> = emptyList(),
+    val skins: List<SkinBackupRecord> = emptyList()
 )
 
 data class SkinScriptBackupRecord(
     val id: Long,
     val name: String,
     val importedAt: Long,
-    val relativeStoragePath: String
+    val relativeStoragePath: String,
+    val heroId: Long? = null,
+    val originalSkinId: Long? = null,
+    val replacementSkinId: Long? = null
 )
 
 data class InstallationBackupRecord(
@@ -33,6 +38,17 @@ data class InstalledFileBackupRecord(
     val destPath: String,
     val wasOverwrite: Boolean,
     val backupRelativePath: String?
+)
+
+data class HeroBackupRecord(
+    val id: Long,
+    val name: String
+)
+
+data class SkinBackupRecord(
+    val id: Long,
+    val heroId: Long,
+    val name: String
 )
 
 data class BackupCompatibilityResult(

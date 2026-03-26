@@ -25,6 +25,8 @@ class ExportAppDataBackupUseCase @Inject constructor(
             val scripts = repository.getAllScriptsOnce()
             val installations = repository.getAllInstallationsOnce()
             val installedFiles = repository.getAllInstalledFilesOnce()
+            val heroes = repository.getAllHeroesOnce()
+            val skins = repository.getAllSkinsOnce()
 
             val filesDir = context.filesDir
             val archiveFilesRoot = File(tempRoot, "files")
@@ -55,7 +57,10 @@ class ExportAppDataBackupUseCase @Inject constructor(
                         id = script.id,
                         name = script.name,
                         importedAt = script.importedAt,
-                        relativeStoragePath = "scripts/${script.id}"
+                        relativeStoragePath = "scripts/${script.id}",
+                        heroId = script.heroId,
+                        originalSkinId = script.originalSkinId,
+                        replacementSkinId = script.replacementSkinId
                     )
                 },
                 installations = installations.map { installation ->
@@ -76,6 +81,19 @@ class ExportAppDataBackupUseCase @Inject constructor(
                         wasOverwrite = installedFile.wasOverwrite,
                         backupRelativePath = installedFile.backupPath
                             ?.let { toRelativePathOrNull(it, filesDir) }
+                    )
+                },
+                heroes = heroes.map { hero ->
+                    HeroBackupRecord(
+                        id = hero.id,
+                        name = hero.name
+                    )
+                },
+                skins = skins.map { skin ->
+                    SkinBackupRecord(
+                        id = skin.id,
+                        heroId = skin.heroId,
+                        name = skin.name
                     )
                 }
             )

@@ -1,11 +1,15 @@
 package com.istarvin.skinscriptinstaller.data.repository
 
+import com.istarvin.skinscriptinstaller.data.db.dao.HeroDao
 import com.istarvin.skinscriptinstaller.data.db.dao.InstalledFileDao
 import com.istarvin.skinscriptinstaller.data.db.dao.InstallationDao
+import com.istarvin.skinscriptinstaller.data.db.dao.SkinDao
 import com.istarvin.skinscriptinstaller.data.db.dao.SkinScriptDao
 import com.istarvin.skinscriptinstaller.data.db.AppDatabase
+import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.InstalledFile
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
+import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
@@ -17,7 +21,9 @@ class ScriptRepository @Inject constructor(
     private val appDatabase: AppDatabase,
     private val skinScriptDao: SkinScriptDao,
     private val installationDao: InstallationDao,
-    private val installedFileDao: InstalledFileDao
+    private val installedFileDao: InstalledFileDao,
+    private val heroDao: HeroDao,
+    private val skinDao: SkinDao
 ) {
     // --- SkinScript ---
 
@@ -74,16 +80,59 @@ class ScriptRepository @Inject constructor(
 
     suspend fun getAllInstalledFilesOnce(): List<InstalledFile> = installedFileDao.getAllOnce()
 
+    // --- Hero ---
+
+    fun getAllHeroes(): Flow<List<Hero>> = heroDao.getAll()
+
+    suspend fun getAllHeroesOnce(): List<Hero> = heroDao.getAllOnce()
+
+    suspend fun getHeroByName(name: String): Hero? = heroDao.getByName(name)
+
+    suspend fun getHeroById(id: Long): Hero? = heroDao.getById(id)
+
+    suspend fun insertHero(hero: Hero): Long = heroDao.insert(hero)
+
+    // --- Skin ---
+
+    fun getSkinsByHeroId(heroId: Long): Flow<List<Skin>> = skinDao.getByHeroId(heroId)
+
+    suspend fun getSkinsByHeroIdOnce(heroId: Long): List<Skin> = skinDao.getByHeroIdOnce(heroId)
+
+    suspend fun getSkinByHeroIdAndName(heroId: Long, name: String): Skin? =
+        skinDao.getByHeroIdAndName(heroId, name)
+
+    suspend fun getSkinById(id: Long): Skin? = skinDao.getById(id)
+
+    suspend fun insertSkin(skin: Skin): Long = skinDao.insert(skin)
+
+    suspend fun getAllSkinsOnce(): List<Skin> = skinDao.getAllOnce()
+
+    // --- Script Classification ---
+
+    suspend fun updateScript(script: SkinScript) = skinScriptDao.update(script)
+
+    // --- Backup ---
+
     suspend fun replaceAllBackupData(
         scripts: List<SkinScript>,
         installations: List<Installation>,
-        installedFiles: List<InstalledFile>
+        installedFiles: List<InstalledFile>,
+        heroes: List<Hero> = emptyList(),
+        skins: List<Skin> = emptyList()
     ) {
         appDatabase.withTransaction {
             installedFileDao.clearAll()
             installationDao.clearAll()
             skinScriptDao.clearAll()
+            skinDao.clearAll()
+            heroDao.clearAll()
 
+            if (heroes.isNotEmpty()) {
+                heroDao.insertAllReplace(heroes)
+            }
+            if (skins.isNotEmpty()) {
+                skinDao.insertAllReplace(skins)
+            }
             if (scripts.isNotEmpty()) {
                 skinScriptDao.insertAllReplace(scripts)
             }

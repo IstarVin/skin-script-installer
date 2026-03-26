@@ -3,10 +3,13 @@ package com.istarvin.skinscriptinstaller.ui.screens.detail
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
+import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
+import com.istarvin.skinscriptinstaller.domain.ClassifyScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.InstallProgress
 import com.istarvin.skinscriptinstaller.domain.InstallScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
@@ -37,6 +40,7 @@ class ScriptDetailViewModel @Inject constructor(
     private val activeUserStore: ActiveUserStore,
     private val installScriptUseCase: InstallScriptUseCase,
     private val restoreScriptUseCase: RestoreScriptUseCase,
+    private val classifyScriptUseCase: ClassifyScriptUseCase,
     private val shizukuManager: ShizukuManager
 ) : ViewModel() {
 
@@ -59,6 +63,22 @@ class ScriptDetailViewModel @Inject constructor(
 
     private val _isOperating = MutableStateFlow(false)
     val isOperating: StateFlow<Boolean> = _isOperating.asStateFlow()
+
+    // Classification state
+    private val _heroName = MutableStateFlow<String?>(null)
+    val heroName: StateFlow<String?> = _heroName.asStateFlow()
+
+    private val _originalSkinName = MutableStateFlow<String?>(null)
+    val originalSkinName: StateFlow<String?> = _originalSkinName.asStateFlow()
+
+    private val _replacementSkinName = MutableStateFlow<String?>(null)
+    val replacementSkinName: StateFlow<String?> = _replacementSkinName.asStateFlow()
+
+    val allHeroes: StateFlow<List<Hero>> = repository.getAllHeroes()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _skinsForSelectedHero = MutableStateFlow<List<Skin>>(emptyList())
+    val skinsForSelectedHero: StateFlow<List<Skin>> = _skinsForSelectedHero.asStateFlow()
 
     private val _eligibleUserIds = MutableStateFlow<List<Int>>(emptyList())
     val eligibleUserIds: StateFlow<List<Int>> = _eligibleUserIds.asStateFlow()
@@ -142,8 +162,20 @@ class ScriptDetailViewModel @Inject constructor(
             script?.let {
                 buildFileTree(it.storagePath)
                 loadInstallationForSelectedUser()
+                loadClassification(it)
             }
         }
+    }
+
+    private suspend fun loadClassification(script: SkinScript) {
+        val hero = script.heroId?.let { repository.getHeroById(it) }
+        val originalSkin = script.originalSkinId?.let { repository.getSkinById(it) }
+        val replacementSkin = script.replacementSkinId?.let { repository.getSkinById(it) }
+        _heroName.value = hero?.name
+        _originalSkinName.value = originalSkin?.name
+        _replacementSkinName.value = replacementSkin?.name
+        // Load skins for the current hero (for autocomplete)
+        hero?.let { loadSkinsForHero(it.id) }
     }
 
     private fun loadInstallationForSelectedUser() {
@@ -321,6 +353,63 @@ class ScriptDetailViewModel @Inject constructor(
 
     fun clearError() {
         _error.value = null
+    }
+
+    // --- Classification ---
+
+    fun loadSkinsForHeroName(heroName: String) {
+        viewModelScope.launch {
+            val hero = repository.getHeroByName(heroName)
+            if (hero != null) {
+                loadSkinsForHero(hero.id)
+            } else {
+                // New hero — show the default skins that will be auto-created
+                _skinsForSelectedHero.value = listOf(
+                    Skin(id = 0, heroId = 0, name = "Default"),
+                    Skin(id = 0, heroId = 0, name = "Basic")
+                )
+            }
+        }
+    }
+
+    private suspend fun loadSkinsForHero(heroId: Long) {
+        _skinsForSelectedHero.value = repository.getSkinsByHeroIdOnce(heroId)
+    }
+
+    fun classifyScript(heroName: String, originalSkinName: String, replacementSkinName: String) {
+        viewModelScope.launch {
+            _error.value = null
+            val result = classifyScriptUseCase.execute(
+                scriptId = scriptId,
+                heroName = heroName.trim(),
+                originalSkinName = originalSkinName.trim(),
+                replacementSkinName = replacementSkinName.trim()
+            )
+            result.onSuccess {
+                // Reload script and classification
+                val updatedScript = repository.getScriptById(scriptId)
+                _script.value = updatedScript
+                updatedScript?.let { loadClassification(it) }
+            }.onFailure { e ->
+                _error.value = e.message ?: "Classification failed"
+            }
+        }
+    }
+
+    fun clearClassification() {
+        viewModelScope.launch {
+            _error.value = null
+            val result = classifyScriptUseCase.clearClassification(scriptId)
+            result.onSuccess {
+                _heroName.value = null
+                _originalSkinName.value = null
+                _replacementSkinName.value = null
+                _skinsForSelectedHero.value = emptyList()
+                _script.value = repository.getScriptById(scriptId)
+            }.onFailure { e ->
+                _error.value = e.message ?: "Failed to clear classification"
+            }
+        }
     }
 }
 

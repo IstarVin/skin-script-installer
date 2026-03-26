@@ -16,28 +16,39 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -65,6 +76,15 @@ fun ScriptDetailScreen(
     val isShizukuReady by viewModel.isShizukuReady.collectAsState()
     val error by viewModel.error.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Classification state
+    val heroName by viewModel.heroName.collectAsState()
+    val originalSkinName by viewModel.originalSkinName.collectAsState()
+    val replacementSkinName by viewModel.replacementSkinName.collectAsState()
+    val allHeroes by viewModel.allHeroes.collectAsState()
+    val skinsForSelectedHero by viewModel.skinsForSelectedHero.collectAsState()
+
+    var showClassifySheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(error) {
         error?.let {
@@ -180,6 +200,17 @@ fun ScriptDetailScreen(
                         }
                     }
                 }
+            }
+
+            // Classification card
+            item {
+                ClassificationCard(
+                    heroName = heroName,
+                    originalSkinName = originalSkinName,
+                    replacementSkinName = replacementSkinName,
+                    onEditClick = { showClassifySheet = true },
+                    onClearClick = { viewModel.clearClassification() }
+                )
             }
 
             // Action buttons
@@ -316,6 +347,289 @@ fun ScriptDetailScreen(
 
             // Bottom spacer
             item { Spacer(modifier = Modifier.height(16.dp)) }
+        }
+
+        // Classify bottom sheet
+        if (showClassifySheet) {
+            ClassifyBottomSheet(
+                currentHeroName = heroName,
+                currentOriginalSkinName = originalSkinName,
+                currentReplacementSkinName = replacementSkinName,
+                allHeroes = allHeroes,
+                skinsForSelectedHero = skinsForSelectedHero,
+                onHeroNameChanged = { viewModel.loadSkinsForHeroName(it) },
+                onConfirm = { hero, original, replacement ->
+                    viewModel.classifyScript(hero, original, replacement)
+                    showClassifySheet = false
+                },
+                onDismiss = { showClassifySheet = false }
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ClassificationCard(
+    heroName: String?,
+    originalSkinName: String?,
+    replacementSkinName: String?,
+    onEditClick: () -> Unit,
+    onClearClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Classification",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                IconButton(onClick = onEditClick, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Edit classification",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (heroName != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = heroName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                if (originalSkinName != null && replacementSkinName != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "$originalSkinName → $replacementSkinName",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(
+                    onClick = onClearClick,
+                    modifier = Modifier.padding(0.dp)
+                ) {
+                    Text("Clear", style = MaterialTheme.typography.labelSmall)
+                }
+            } else {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Uncategorized",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                OutlinedButton(onClick = onEditClick) {
+                    Text("Classify this script")
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ClassifyBottomSheet(
+    currentHeroName: String?,
+    currentOriginalSkinName: String?,
+    currentReplacementSkinName: String?,
+    allHeroes: List<com.istarvin.skinscriptinstaller.data.db.entity.Hero>,
+    skinsForSelectedHero: List<com.istarvin.skinscriptinstaller.data.db.entity.Skin>,
+    onHeroNameChanged: (String) -> Unit,
+    onConfirm: (heroName: String, originalSkinName: String, replacementSkinName: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    var heroText by remember { mutableStateOf(currentHeroName ?: "") }
+    var originalSkinText by remember { mutableStateOf(currentOriginalSkinName ?: "") }
+    var replacementSkinText by remember { mutableStateOf(currentReplacementSkinName ?: "") }
+
+    var heroExpanded by remember { mutableStateOf(false) }
+    var originalSkinExpanded by remember { mutableStateOf(false) }
+    var replacementSkinExpanded by remember { mutableStateOf(false) }
+
+    // Load skins when hero text changes
+    LaunchedEffect(heroText) {
+        if (heroText.isNotBlank()) {
+            onHeroNameChanged(heroText)
+        }
+    }
+
+    val filteredHeroes = remember(heroText, allHeroes) {
+        if (heroText.isBlank()) allHeroes
+        else allHeroes.filter { it.name.contains(heroText, ignoreCase = true) }
+    }
+
+    val filteredOriginalSkins = remember(originalSkinText, skinsForSelectedHero) {
+        if (originalSkinText.isBlank()) skinsForSelectedHero
+        else skinsForSelectedHero.filter { it.name.contains(originalSkinText, ignoreCase = true) }
+    }
+
+    val filteredReplacementSkins = remember(replacementSkinText, skinsForSelectedHero) {
+        if (replacementSkinText.isBlank()) skinsForSelectedHero
+        else skinsForSelectedHero.filter { it.name.contains(replacementSkinText, ignoreCase = true) }
+    }
+
+    val canConfirm = heroText.isNotBlank() &&
+            originalSkinText.isNotBlank() &&
+            replacementSkinText.isNotBlank()
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "Classify Script",
+                style = MaterialTheme.typography.titleLarge
+            )
+            Text(
+                text = "Assign a hero and skin information to this script",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Hero field
+            ExposedDropdownMenuBox(
+                expanded = heroExpanded && filteredHeroes.isNotEmpty(),
+                onExpandedChange = { heroExpanded = it }
+            ) {
+                OutlinedTextField(
+                    value = heroText,
+                    onValueChange = {
+                        heroText = it
+                        heroExpanded = true
+                    },
+                    label = { Text("Hero") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+                    singleLine = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = heroExpanded) }
+                )
+                ExposedDropdownMenu(
+                    expanded = heroExpanded && filteredHeroes.isNotEmpty(),
+                    onDismissRequest = { heroExpanded = false }
+                ) {
+                    filteredHeroes.forEach { hero ->
+                        DropdownMenuItem(
+                            text = { Text(hero.name) },
+                            onClick = {
+                                heroText = hero.name
+                                heroExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Original Skin field
+            ExposedDropdownMenuBox(
+                expanded = originalSkinExpanded && filteredOriginalSkins.isNotEmpty(),
+                onExpandedChange = { originalSkinExpanded = it }
+            ) {
+                OutlinedTextField(
+                    value = originalSkinText,
+                    onValueChange = {
+                        originalSkinText = it
+                        originalSkinExpanded = true
+                    },
+                    label = { Text("Original Skin (being replaced)") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+                    singleLine = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = originalSkinExpanded) }
+                )
+                ExposedDropdownMenu(
+                    expanded = originalSkinExpanded && filteredOriginalSkins.isNotEmpty(),
+                    onDismissRequest = { originalSkinExpanded = false }
+                ) {
+                    filteredOriginalSkins.forEach { skin ->
+                        DropdownMenuItem(
+                            text = { Text(skin.name) },
+                            onClick = {
+                                originalSkinText = skin.name
+                                originalSkinExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Replacement Skin field
+            ExposedDropdownMenuBox(
+                expanded = replacementSkinExpanded && filteredReplacementSkins.isNotEmpty(),
+                onExpandedChange = { replacementSkinExpanded = it }
+            ) {
+                OutlinedTextField(
+                    value = replacementSkinText,
+                    onValueChange = {
+                        replacementSkinText = it
+                        replacementSkinExpanded = true
+                    },
+                    label = { Text("Replacement Skin (new skin)") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
+                    singleLine = true,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = replacementSkinExpanded) }
+                )
+                ExposedDropdownMenu(
+                    expanded = replacementSkinExpanded && filteredReplacementSkins.isNotEmpty(),
+                    onDismissRequest = { replacementSkinExpanded = false }
+                ) {
+                    filteredReplacementSkins.forEach { skin ->
+                        DropdownMenuItem(
+                            text = { Text(skin.name) },
+                            onClick = {
+                                replacementSkinText = skin.name
+                                replacementSkinExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(
+                    onClick = { onConfirm(heroText, originalSkinText, replacementSkinText) },
+                    enabled = canConfirm
+                ) {
+                    Text("Save")
+                }
+            }
         }
     }
 }

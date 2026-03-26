@@ -1,7 +1,9 @@
 package com.istarvin.skinscriptinstaller.data.repository
 
+import com.istarvin.skinscriptinstaller.data.db.dao.HeroDao
 import com.istarvin.skinscriptinstaller.data.db.dao.InstalledFileDao
 import com.istarvin.skinscriptinstaller.data.db.dao.InstallationDao
+import com.istarvin.skinscriptinstaller.data.db.dao.SkinDao
 import com.istarvin.skinscriptinstaller.data.db.dao.SkinScriptDao
 import com.istarvin.skinscriptinstaller.data.db.AppDatabase
 import com.istarvin.skinscriptinstaller.data.db.entity.InstalledFile
@@ -19,6 +21,8 @@ class ScriptRepositoryTest {
     private lateinit var skinScriptDao: SkinScriptDao
     private lateinit var installationDao: InstallationDao
     private lateinit var installedFileDao: InstalledFileDao
+    private lateinit var heroDao: HeroDao
+    private lateinit var skinDao: SkinDao
     private lateinit var appDatabase: AppDatabase
     private lateinit var repository: ScriptRepository
 
@@ -27,8 +31,10 @@ class ScriptRepositoryTest {
         skinScriptDao = mockk(relaxed = true)
         installationDao = mockk(relaxed = true)
         installedFileDao = mockk(relaxed = true)
+        heroDao = mockk(relaxed = true)
+        skinDao = mockk(relaxed = true)
         appDatabase = mockk(relaxed = true)
-        repository = ScriptRepository(appDatabase, skinScriptDao, installationDao, installedFileDao)
+        repository = ScriptRepository(appDatabase, skinScriptDao, installationDao, installedFileDao, heroDao, skinDao)
     }
 
     // --- SkinScript delegation ---

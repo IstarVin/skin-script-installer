@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import kotlinx.coroutines.flow.Flow
 
@@ -21,6 +22,9 @@ interface SkinScriptDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllReplace(scripts: List<SkinScript>)
+
+    @Update
+    suspend fun update(script: SkinScript)
 
     @Delete
     suspend fun delete(script: SkinScript)

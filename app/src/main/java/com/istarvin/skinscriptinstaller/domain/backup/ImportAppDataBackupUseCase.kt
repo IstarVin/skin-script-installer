@@ -3,8 +3,10 @@ package com.istarvin.skinscriptinstaller.domain.backup
 import android.content.Context
 import android.net.Uri
 import com.istarvin.skinscriptinstaller.BuildConfig
+import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.InstalledFile
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
+import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.db.migrations.DatabaseMigrations
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
@@ -57,12 +59,30 @@ class ImportAppDataBackupUseCase @Inject constructor(
 
             replaceFilePayload(extractRoot)
 
+            val heroes = manifest.heroes.map { hero ->
+                Hero(
+                    id = hero.id,
+                    name = hero.name
+                )
+            }
+
+            val skins = manifest.skins.map { skin ->
+                Skin(
+                    id = skin.id,
+                    heroId = skin.heroId,
+                    name = skin.name
+                )
+            }
+
             val scripts = manifest.scripts.map { script ->
                 SkinScript(
                     id = script.id,
                     name = script.name,
                     importedAt = script.importedAt,
-                    storagePath = File(context.filesDir, script.relativeStoragePath).absolutePath
+                    storagePath = File(context.filesDir, script.relativeStoragePath).absolutePath,
+                    heroId = script.heroId,
+                    originalSkinId = script.originalSkinId,
+                    replacementSkinId = script.replacementSkinId
                 )
             }
 
@@ -88,7 +108,7 @@ class ImportAppDataBackupUseCase @Inject constructor(
                 )
             }
 
-            repository.replaceAllBackupData(scripts, installations, installedFiles)
+            repository.replaceAllBackupData(scripts, installations, installedFiles, heroes, skins)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
