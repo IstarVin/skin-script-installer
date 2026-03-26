@@ -1,0 +1,94 @@
+name: Android Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Configure keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 --decode > keystore.jks
+
+          PROPERTIES_PATH="${{ github.workspace }}/keystore.properties"
+
+          echo "storeFile=${{ github.workspace }}/keystore.jks" > "$PROPERTIES_PATH"
+          echo "storePassword=${{ secrets.KEYSTORE_PASSWORD }}" >> "$PROPERTIES_PATH"
+          echo "keyAlias=${{ secrets.KEY_ALIAS }}" >> "$PROPERTIES_PATH"
+          echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> "$PROPERTIES_PATH"
+
+          echo "Created keystore.properties at $PROPERTIES_PATH"
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Build Android release APK
+        run: ./gradlew :app:assembleRelease
+
+      - name: List build outputs
+        run: |
+          echo "Build outputs:"
+          find app/build/outputs -name "*.apk" -type f
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Cleanup keystore
+        if: always()
+        run: |
+          rm -f keystore.jks
+          rm -f keystore.properties
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Create checksums
+        run: |
+          cd dist
+          sha256sum app-release-apk/* > checksums.txt
+          cat checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/app-release-apk/*
+            dist/checksums.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: false
