@@ -483,11 +483,6 @@ private fun ScriptCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                 }
-                Text(
-                    text = "Imported: ${formatDate(item.script.importedAt)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
             }
 
             Spacer(modifier = Modifier.width(8.dp))
