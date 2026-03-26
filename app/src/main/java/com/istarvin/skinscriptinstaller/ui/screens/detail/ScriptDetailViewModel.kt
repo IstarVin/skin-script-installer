@@ -33,7 +33,7 @@ class ScriptDetailViewModel @Inject constructor(
     private val repository: ScriptRepository,
     private val installScriptUseCase: InstallScriptUseCase,
     private val restoreScriptUseCase: RestoreScriptUseCase,
-    private val shizukuManager: ShizukuManager
+    shizukuManager: ShizukuManager
 ) : ViewModel() {
 
     private val scriptId: Long = savedStateHandle["scriptId"] ?: -1L

@@ -20,7 +20,7 @@ import javax.inject.Inject
  * - Otherwise, scan for an `Art` folder and wrap it in the expected ML path structure.
  */
 class ImportScriptUseCase @Inject constructor(
-    @ApplicationContext private val context: Context,
+    @param:ApplicationContext private val context: Context,
     private val repository: ScriptRepository
 ) {
     companion object {
