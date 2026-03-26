@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,9 +24,6 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: gradle
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
 
       - name: Configure keystore
         run: |
@@ -57,7 +55,6 @@ jobs:
           name: app-release-apk
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
-          retention-days: 1
 
       - name: Cleanup keystore
         if: always()
@@ -75,7 +72,6 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: dist/
-          merge-multiple: true
 
       - name: Create checksums
         run: |
