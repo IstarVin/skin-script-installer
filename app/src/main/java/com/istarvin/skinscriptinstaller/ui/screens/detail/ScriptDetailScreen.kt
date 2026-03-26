@@ -1,6 +1,7 @@
 package com.istarvin.skinscriptinstaller.ui.screens.detail
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -51,6 +52,7 @@ fun ScriptDetailScreen(
     val script by viewModel.script.collectAsState()
     val installation by viewModel.installation.collectAsState()
     val fileTree by viewModel.fileTree.collectAsState()
+    val expandedDirectoryIds by viewModel.expandedDirectoryIds.collectAsState()
     val isOperating by viewModel.isOperating.collectAsState()
     val installProgress by viewModel.installProgress.collectAsState()
     val restoreProgress by viewModel.restoreProgress.collectAsState()
@@ -78,7 +80,9 @@ fun ScriptDetailScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        val flattenedTree = remember(fileTree) { flattenTree(fileTree) }
+        val flattenedTree = remember(fileTree, expandedDirectoryIds) {
+            flattenTree(fileTree, expandedDirectoryIds)
+        }
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -209,15 +213,22 @@ fun ScriptDetailScreen(
                 )
             }
 
-            items(flattenedTree) { node ->
+            items(flattenedTree, key = { it.id }) { node ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable(enabled = node.isDirectory) {
+                            viewModel.toggleDirectory(node.id)
+                        }
                         .padding(start = (node.depth * 16).dp, top = 2.dp, bottom = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (node.isDirectory) "📁" else "📄",
+                        text = when {
+                            !node.isDirectory -> "📄"
+                            node.id in expandedDirectoryIds -> "📂"
+                            else -> "📁"
+                        },
                         style = MaterialTheme.typography.bodySmall
                     )
                     Spacer(modifier = Modifier.width(4.dp))
@@ -235,12 +246,15 @@ fun ScriptDetailScreen(
     }
 }
 
-private fun flattenTree(nodes: List<FileTreeNode>): List<FileTreeNode> {
+private fun flattenTree(
+    nodes: List<FileTreeNode>,
+    expandedDirectoryIds: Set<String>
+): List<FileTreeNode> {
     val result = mutableListOf<FileTreeNode>()
     for (node in nodes) {
         result.add(node)
-        if (node.isDirectory) {
-            result.addAll(flattenTree(node.children))
+        if (node.isDirectory && node.id in expandedDirectoryIds) {
+            result.addAll(flattenTree(node.children, expandedDirectoryIds))
         }
     }
     return result

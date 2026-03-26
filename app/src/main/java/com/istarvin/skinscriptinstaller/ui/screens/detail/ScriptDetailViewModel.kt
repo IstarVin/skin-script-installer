@@ -21,6 +21,7 @@ import java.io.File
 import javax.inject.Inject
 
 data class FileTreeNode(
+    val id: String,
     val name: String,
     val isDirectory: Boolean,
     val children: List<FileTreeNode> = emptyList(),
@@ -46,6 +47,9 @@ class ScriptDetailViewModel @Inject constructor(
 
     private val _fileTree = MutableStateFlow<List<FileTreeNode>>(emptyList())
     val fileTree: StateFlow<List<FileTreeNode>> = _fileTree.asStateFlow()
+
+    private val _expandedDirectoryIds = MutableStateFlow<Set<String>>(emptySet())
+    val expandedDirectoryIds: StateFlow<Set<String>> = _expandedDirectoryIds.asStateFlow()
 
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
@@ -80,7 +84,12 @@ class ScriptDetailViewModel @Inject constructor(
     private fun buildFileTree(storagePath: String) {
         val root = File(storagePath)
         if (root.exists()) {
-            _fileTree.value = buildTreeNodes(root, 0)
+            val tree = buildTreeNodes(root, 0)
+            _fileTree.value = tree
+            _expandedDirectoryIds.value = collectDefaultExpandedDirectoryIds(tree)
+        } else {
+            _fileTree.value = emptyList()
+            _expandedDirectoryIds.value = emptySet()
         }
     }
 
@@ -91,11 +100,44 @@ class ScriptDetailViewModel @Inject constructor(
 
         return children.map { file ->
             FileTreeNode(
+                id = file.absolutePath,
                 name = file.name,
                 isDirectory = file.isDirectory,
                 children = if (file.isDirectory) buildTreeNodes(file, depth + 1) else emptyList(),
                 depth = depth
             )
+        }
+    }
+
+    private fun collectDefaultExpandedDirectoryIds(nodes: List<FileTreeNode>): Set<String> {
+        val pathToArt = findPathToDirectory(nodes, targetName = "Art") ?: return emptySet()
+        return pathToArt.dropLast(1).mapTo(mutableSetOf()) { it.id }
+    }
+
+    private fun findPathToDirectory(
+        nodes: List<FileTreeNode>,
+        targetName: String
+    ): List<FileTreeNode>? {
+        for (node in nodes) {
+            if (!node.isDirectory) {
+                continue
+            }
+
+            if (node.name == targetName) {
+                return listOf(node)
+            }
+
+            val childPath = findPathToDirectory(node.children, targetName)
+            if (childPath != null) {
+                return listOf(node) + childPath
+            }
+        }
+        return null
+    }
+
+    fun toggleDirectory(directoryId: String) {
+        _expandedDirectoryIds.value = _expandedDirectoryIds.value.toMutableSet().apply {
+            if (contains(directoryId)) remove(directoryId) else add(directoryId)
         }
     }
 
