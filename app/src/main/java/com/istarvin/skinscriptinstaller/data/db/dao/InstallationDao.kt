@@ -2,6 +2,7 @@ package com.istarvin.skinscriptinstaller.data.db.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
@@ -11,6 +12,9 @@ import kotlinx.coroutines.flow.Flow
 interface InstallationDao {
     @Insert
     suspend fun insert(installation: Installation): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAllReplace(installations: List<Installation>)
 
     @Update
     suspend fun update(installation: Installation)
@@ -38,5 +42,11 @@ interface InstallationDao {
         ")"
     )
     fun getLatestInstallationsByUserId(userId: Int): Flow<List<Installation>>
+
+    @Query("SELECT * FROM installations ORDER BY id ASC")
+    suspend fun getAllOnce(): List<Installation>
+
+    @Query("DELETE FROM installations")
+    suspend fun clearAll()
 }
 

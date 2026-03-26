@@ -3,15 +3,18 @@ package com.istarvin.skinscriptinstaller.data.repository
 import com.istarvin.skinscriptinstaller.data.db.dao.InstalledFileDao
 import com.istarvin.skinscriptinstaller.data.db.dao.InstallationDao
 import com.istarvin.skinscriptinstaller.data.db.dao.SkinScriptDao
+import com.istarvin.skinscriptinstaller.data.db.AppDatabase
 import com.istarvin.skinscriptinstaller.data.db.entity.InstalledFile
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class ScriptRepository @Inject constructor(
+    private val appDatabase: AppDatabase,
     private val skinScriptDao: SkinScriptDao,
     private val installationDao: InstallationDao,
     private val installedFileDao: InstalledFileDao
@@ -64,5 +67,33 @@ class ScriptRepository @Inject constructor(
 
     suspend fun deleteInstalledFilesByInstallation(installationId: Long) =
         installedFileDao.deleteByInstallationId(installationId)
+
+    suspend fun getAllScriptsOnce(): List<SkinScript> = skinScriptDao.getAllOnce()
+
+    suspend fun getAllInstallationsOnce(): List<Installation> = installationDao.getAllOnce()
+
+    suspend fun getAllInstalledFilesOnce(): List<InstalledFile> = installedFileDao.getAllOnce()
+
+    suspend fun replaceAllBackupData(
+        scripts: List<SkinScript>,
+        installations: List<Installation>,
+        installedFiles: List<InstalledFile>
+    ) {
+        appDatabase.withTransaction {
+            installedFileDao.clearAll()
+            installationDao.clearAll()
+            skinScriptDao.clearAll()
+
+            if (scripts.isNotEmpty()) {
+                skinScriptDao.insertAllReplace(scripts)
+            }
+            if (installations.isNotEmpty()) {
+                installationDao.insertAllReplace(installations)
+            }
+            if (installedFiles.isNotEmpty()) {
+                installedFileDao.insertAllReplace(installedFiles)
+            }
+        }
+    }
 }
 

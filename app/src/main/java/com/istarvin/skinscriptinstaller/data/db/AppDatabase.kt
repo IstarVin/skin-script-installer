@@ -11,10 +11,14 @@ import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 
 @Database(
     entities = [SkinScript::class, Installation::class, InstalledFile::class],
-    version = 2,
+    version = AppDatabase.DATABASE_VERSION,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
+    companion object {
+        const val DATABASE_VERSION = 2
+    }
+
     abstract fun skinScriptDao(): SkinScriptDao
     abstract fun installationDao(): InstallationDao
     abstract fun installedFileDao(): InstalledFileDao

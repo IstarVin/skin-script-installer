@@ -1,5 +1,8 @@
 package com.istarvin.skinscriptinstaller.ui.screens.settings
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -25,15 +28,19 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,6 +51,26 @@ fun SettingsScreen(
     val isShizukuAvailable by viewModel.isShizukuAvailable.collectAsState()
     val isPermissionGranted by viewModel.isPermissionGranted.collectAsState()
     val isServiceBound by viewModel.isServiceBound.collectAsState()
+    val isBackupOperationRunning by viewModel.isBackupOperationRunning.collectAsState()
+    val backupMessage by viewModel.backupMessage.collectAsState()
+
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss") }
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data
+        if (result.resultCode == android.app.Activity.RESULT_OK && uri != null) {
+            viewModel.exportBackup(uri)
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.restoreBackup(uri)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -157,6 +184,79 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Refresh Status")
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Backup & Restore",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Backup includes database records, imported scripts, and overwrite backups.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            val fileName = "skinscript_backup_${LocalDateTime.now().format(dateFormatter)}.zip"
+                            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "application/zip"
+                                putExtra(Intent.EXTRA_TITLE, fileName)
+                            }
+                            exportLauncher.launch(intent)
+                        },
+                        enabled = !isBackupOperationRunning,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Export Backup")
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            importLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
+                        },
+                        enabled = !isBackupOperationRunning,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Restore Backup")
+                    }
+
+                    AnimatedVisibility(visible = isBackupOperationRunning) {
+                        Column(modifier = Modifier.padding(top = 12.dp)) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Processing backup operation...",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+
+                    AnimatedVisibility(visible = backupMessage != null) {
+                        Text(
+                            text = backupMessage.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (backupMessage?.contains("failed", ignoreCase = true) == true ||
+                                backupMessage?.contains("incompatible", ignoreCase = true) == true
+                            ) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                            modifier = Modifier.padding(top = 12.dp)
+                        )
+                    }
+                }
             }
         }
     }
