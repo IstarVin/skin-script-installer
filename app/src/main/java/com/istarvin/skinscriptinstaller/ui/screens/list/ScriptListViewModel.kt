@@ -7,6 +7,8 @@ import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
+import com.istarvin.skinscriptinstaller.service.InvalidPasswordException
+import com.istarvin.skinscriptinstaller.service.PasswordRequiredException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -23,6 +25,11 @@ data class ScriptWithStatus(
     val status: String
         get() = latestInstallation?.status ?: "not_installed"
 }
+
+data class ZipPasswordPrompt(
+    val zipUri: Uri,
+    val errorMessage: String? = null
+)
 
 @HiltViewModel
 class ScriptListViewModel @Inject constructor(
@@ -42,6 +49,9 @@ class ScriptListViewModel @Inject constructor(
     private val _isImporting = MutableStateFlow(false)
     val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
 
+    private val _zipPasswordPrompt = MutableStateFlow<ZipPasswordPrompt?>(null)
+    val zipPasswordPrompt: StateFlow<ZipPasswordPrompt?> = _zipPasswordPrompt.asStateFlow()
+
     init {
         viewModelScope.launch {
             scripts.collect { scriptList ->
@@ -58,10 +68,60 @@ class ScriptListViewModel @Inject constructor(
         viewModelScope.launch {
             _isImporting.value = true
             _importError.value = null
+            _zipPasswordPrompt.value = null
             val result = importScriptUseCase.execute(treeUri)
             result.onFailure { e ->
                 _importError.value = e.message ?: "Import failed"
             }
+            _isImporting.value = false
+        }
+    }
+
+    fun importZip(zipUri: Uri) {
+        importZipInternal(zipUri, password = null)
+    }
+
+    fun retryZipWithPassword(password: String) {
+        val prompt = _zipPasswordPrompt.value ?: return
+        importZipInternal(prompt.zipUri, password.toCharArray())
+    }
+
+    fun dismissZipPasswordPrompt() {
+        _zipPasswordPrompt.value = null
+    }
+
+    private fun importZipInternal(zipUri: Uri, password: CharArray?) {
+        viewModelScope.launch {
+            _isImporting.value = true
+            _importError.value = null
+
+            val result = importScriptUseCase.executeZip(zipUri, password)
+            result.onSuccess {
+                _zipPasswordPrompt.value = null
+            }
+            result.onFailure { e ->
+                when (e) {
+                    is PasswordRequiredException -> {
+                        _zipPasswordPrompt.value = ZipPasswordPrompt(
+                            zipUri = zipUri,
+                            errorMessage = null
+                        )
+                    }
+
+                    is InvalidPasswordException -> {
+                        _zipPasswordPrompt.value = ZipPasswordPrompt(
+                            zipUri = zipUri,
+                            errorMessage = "Incorrect password, try again"
+                        )
+                    }
+
+                    else -> {
+                        _zipPasswordPrompt.value = null
+                        _importError.value = e.message ?: "Import failed"
+                    }
+                }
+            }
+
             _isImporting.value = false
         }
     }

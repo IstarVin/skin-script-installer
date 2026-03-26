@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +31,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -45,6 +47,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import java.text.SimpleDateFormat
@@ -61,9 +64,12 @@ fun ScriptListScreen(
     val scriptsWithStatus by viewModel.scriptsWithStatus.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
     val importError by viewModel.importError.collectAsState()
+    val zipPasswordPrompt by viewModel.zipPasswordPrompt.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var scriptToDelete by remember { mutableStateOf<ScriptWithStatus?>(null) }
+    var showImportChoiceDialog by remember { mutableStateOf(false) }
+    var zipPasswordText by remember { mutableStateOf("") }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -71,6 +77,16 @@ fun ScriptListScreen(
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.data?.let { uri ->
                 viewModel.importScript(uri)
+            }
+        }
+    }
+
+    val zipPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { uri ->
+                viewModel.importZip(uri)
             }
         }
     }
@@ -96,8 +112,7 @@ fun ScriptListScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
-                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
-                    folderPickerLauncher.launch(intent)
+                    showImportChoiceDialog = true
                 }
             ) {
                 if (isImporting) {
@@ -127,7 +142,7 @@ fun ScriptListScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Tap + to import a skin script folder",
+                        text = "Tap + to import a skin script folder or ZIP",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -139,7 +154,7 @@ fun ScriptListScreen(
                     .fillMaxSize()
                     .padding(padding),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)
+                contentPadding = PaddingValues(16.dp)
             ) {
                 items(scriptsWithStatus, key = { it.script.id }) { item ->
                     ScriptCard(
@@ -149,6 +164,101 @@ fun ScriptListScreen(
                     )
                 }
             }
+        }
+
+        if (showImportChoiceDialog) {
+            AlertDialog(
+                onDismissRequest = { showImportChoiceDialog = false },
+                title = { Text("Import Script") },
+                text = { Text("Choose what to import") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showImportChoiceDialog = false
+                        val folderIntent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                        folderPickerLauncher.launch(folderIntent)
+                    }) {
+                        Text("Folder")
+                    }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = {
+                            showImportChoiceDialog = false
+                            val zipIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE)
+                                type = "application/zip"
+                                putExtra(
+                                    Intent.EXTRA_MIME_TYPES,
+                                    arrayOf(
+                                        "application/zip",
+                                        "application/x-zip-compressed",
+                                        "multipart/x-zip"
+                                    )
+                                )
+                            }
+                            zipPickerLauncher.launch(zipIntent)
+                        }) {
+                            Text("ZIP")
+                        }
+                        TextButton(onClick = { showImportChoiceDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                }
+            )
+        }
+
+        zipPasswordPrompt?.let { prompt ->
+            AlertDialog(
+                onDismissRequest = {
+                    zipPasswordText = ""
+                    viewModel.dismissZipPasswordPrompt()
+                },
+                title = { Text("ZIP Password") },
+                text = {
+                    Column {
+                        prompt.errorMessage?.let {
+                            Text(
+                                text = it,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                        Text("Enter the password for this ZIP archive")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = zipPasswordText,
+                            onValueChange = { zipPasswordText = it },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            label = { Text("Password") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.retryZipWithPassword(zipPasswordText)
+                            zipPasswordText = ""
+                        },
+                        enabled = zipPasswordText.isNotBlank() && !isImporting
+                    ) {
+                        Text("Import")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            zipPasswordText = ""
+                            viewModel.dismissZipPasswordPrompt()
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
 
         // Delete confirmation dialog

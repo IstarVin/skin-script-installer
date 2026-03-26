@@ -79,6 +79,9 @@ dependencies {
     // DocumentFile (SAF)
     implementation(libs.androidx.documentfile)
 
+    // Zip support
+    implementation(libs.zip4j)
+
     // Test
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
