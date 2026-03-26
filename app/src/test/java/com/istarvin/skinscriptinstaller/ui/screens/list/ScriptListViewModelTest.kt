@@ -7,6 +7,7 @@ import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
+import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.service.InvalidPasswordException
@@ -30,6 +31,7 @@ class ScriptListViewModelTest {
     private lateinit var repository: ScriptRepository
     private lateinit var importScriptUseCase: ImportScriptUseCase
     private lateinit var restoreScriptUseCase: RestoreScriptUseCase
+    private lateinit var fetchHeroCatalogUseCase: FetchHeroCatalogUseCase
     private lateinit var activeUserStore: ActiveUserStore
     private lateinit var shizukuManager: ShizukuManager
 
@@ -46,6 +48,7 @@ class ScriptListViewModelTest {
         repository = mockk(relaxed = true)
         importScriptUseCase = mockk(relaxed = true)
         restoreScriptUseCase = mockk(relaxed = true)
+        fetchHeroCatalogUseCase = mockk(relaxed = true)
         activeUserStore = mockk(relaxed = true)
         shizukuManager = mockk(relaxed = true)
 
@@ -54,6 +57,7 @@ class ScriptListViewModelTest {
         every { repository.getAllScripts() } returns flowOf(emptyList())
         every { repository.getAllHeroes() } returns flowOf(emptyList())
         every { repository.getLatestInstallations(any<Int>()) } returns flowOf(emptyList())
+        coEvery { fetchHeroCatalogUseCase.execute() } returns Result.success(0)
     }
 
     @After
@@ -63,7 +67,12 @@ class ScriptListViewModelTest {
 
     private fun createViewModel() {
         viewModel = ScriptListViewModel(
-            repository, importScriptUseCase, restoreScriptUseCase, activeUserStore, shizukuManager
+            repository,
+            importScriptUseCase,
+            restoreScriptUseCase,
+            activeUserStore,
+            shizukuManager,
+            fetchHeroCatalogUseCase
         )
     }
 
@@ -120,9 +129,9 @@ class ScriptListViewModelTest {
         assertEquals(3, result.size)
         assertEquals(listOf("Miya", "Layla", "Uncategorized"), result.map { it.title })
         assertTrue(result.all { it.isExpanded })
-        assertEquals(listOf(1L), result[0].scripts.map { it.script.id })
-        assertEquals(listOf(2L), result[1].scripts.map { it.script.id })
-        assertEquals(listOf(3L), result[2].scripts.map { it.script.id })
+        assertEquals(listOf(1L), result[0].skinReplacementSections.single().scripts.map { it.script.id })
+        assertEquals(listOf(2L), result[1].skinReplacementSections.single().scripts.map { it.script.id })
+        assertEquals(listOf(3L), result[2].flatScripts.map { it.script.id })
 
         collectJob.cancel()
     }
@@ -148,14 +157,14 @@ class ScriptListViewModelTest {
         }
         advanceUntilIdle()
 
-        viewModel.toggleHeroSection("Miya")
+        viewModel.toggleSection("Miya")
         advanceUntilIdle()
 
         var result = viewModel.heroScriptSections.value
         assertFalse(result.first { it.key == "Miya" }.isExpanded)
         assertTrue(result.first { it.key == "Layla" }.isExpanded)
 
-        viewModel.toggleHeroSection("Miya")
+        viewModel.toggleSection("Miya")
         advanceUntilIdle()
 
         result = viewModel.heroScriptSections.value

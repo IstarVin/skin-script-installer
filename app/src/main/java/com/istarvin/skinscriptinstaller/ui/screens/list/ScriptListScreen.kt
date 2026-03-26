@@ -76,6 +76,7 @@ import java.util.Locale
 @Composable
 fun ScriptListScreen(
     onScriptClick: (Long) -> Unit,
+    onScriptClickAutoClassify: (Long) -> Unit,
     onSettingsClick: () -> Unit,
     viewModel: ScriptListViewModel = hiltViewModel()
 ) {
@@ -85,6 +86,7 @@ fun ScriptListScreen(
     val isImporting by viewModel.isImporting.collectAsState()
     val importError by viewModel.importError.collectAsState()
     val zipPasswordPrompt by viewModel.zipPasswordPrompt.collectAsState()
+    val pendingClassificationScriptId by viewModel.pendingClassificationScriptId.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var scriptToDelete by remember { mutableStateOf<ScriptWithStatus?>(null) }
@@ -397,6 +399,28 @@ fun ScriptListScreen(
                     }
                 )
             }
+        }
+
+        // Prompt user to classify after a successful import
+        pendingClassificationScriptId?.let { scriptId ->
+            AlertDialog(
+                onDismissRequest = { viewModel.dismissPendingClassification() },
+                title = { Text("Script Imported") },
+                text = { Text("Would you like to classify this script now?") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        viewModel.dismissPendingClassification()
+                        onScriptClickAutoClassify(scriptId)
+                    }) {
+                        Text("Classify Now")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { viewModel.dismissPendingClassification() }) {
+                        Text("Later")
+                    }
+                }
+            )
         }
     }
 }

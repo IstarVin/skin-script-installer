@@ -189,6 +189,9 @@ class ScriptListViewModel @Inject constructor(
     private val _zipPasswordPrompt = MutableStateFlow<ZipPasswordPrompt?>(null)
     val zipPasswordPrompt: StateFlow<ZipPasswordPrompt?> = _zipPasswordPrompt.asStateFlow()
 
+    private val _pendingClassificationScriptId = MutableStateFlow<Long?>(null)
+    val pendingClassificationScriptId: StateFlow<Long?> = _pendingClassificationScriptId.asStateFlow()
+
     init {
         observeEligibleUsers()
         observeHeroSections()
@@ -283,6 +286,9 @@ class ScriptListViewModel @Inject constructor(
             _importError.value = null
             _zipPasswordPrompt.value = null
             val result = importScriptUseCase.execute(treeUri)
+            result.onSuccess { script ->
+                _pendingClassificationScriptId.value = script.id
+            }
             result.onFailure { e ->
                 _importError.value = e.message ?: "Import failed"
             }
@@ -309,8 +315,9 @@ class ScriptListViewModel @Inject constructor(
             _importError.value = null
 
             val result = importScriptUseCase.executeZip(zipUri, password)
-            result.onSuccess {
+            result.onSuccess { script ->
                 _zipPasswordPrompt.value = null
+                _pendingClassificationScriptId.value = script.id
             }
             result.onFailure { e ->
                 when (e) {
@@ -370,6 +377,10 @@ class ScriptListViewModel @Inject constructor(
 
     fun clearImportError() {
         _importError.value = null
+    }
+
+    fun dismissPendingClassification() {
+        _pendingClassificationScriptId.value = null
     }
 
     private fun buildHeroScriptGroups(items: List<ScriptWithStatus>): List<HeroScriptGroup> {

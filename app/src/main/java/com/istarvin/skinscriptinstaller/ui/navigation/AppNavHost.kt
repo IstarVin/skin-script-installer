@@ -21,6 +21,9 @@ fun AppNavHost(navController: NavHostController) {
                 onScriptClick = { scriptId ->
                     navController.navigate(Screen.ScriptDetail.createRoute(scriptId))
                 },
+                onScriptClickAutoClassify = { scriptId ->
+                    navController.navigate(Screen.ScriptDetail.createRoute(scriptId, autoClassify = true))
+                },
                 onSettingsClick = {
                     navController.navigate(Screen.Settings.route)
                 }
@@ -30,11 +33,14 @@ fun AppNavHost(navController: NavHostController) {
         composable(
             route = Screen.ScriptDetail.route,
             arguments = listOf(
-                navArgument("scriptId") { type = NavType.LongType }
+                navArgument("scriptId") { type = NavType.LongType },
+                navArgument("autoClassify") { type = NavType.BoolType; defaultValue = false }
             )
-        ) {
+        ) { backStackEntry ->
+            val autoClassify = backStackEntry.arguments?.getBoolean("autoClassify") ?: false
             ScriptDetailScreen(
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                autoClassify = autoClassify
             )
         }
 

@@ -65,6 +65,7 @@ import java.util.Locale
 @Composable
 fun ScriptDetailScreen(
     onNavigateBack: () -> Unit,
+    autoClassify: Boolean = false,
     viewModel: ScriptDetailViewModel = hiltViewModel()
 ) {
     val script by viewModel.script.collectAsState()
@@ -88,6 +89,10 @@ fun ScriptDetailScreen(
     val skinsForSelectedHero by viewModel.skinsForSelectedHero.collectAsState()
 
     var showClassifySheet by remember { mutableStateOf(false) }
+
+    LaunchedEffect(autoClassify) {
+        if (autoClassify) showClassifySheet = true
+    }
 
     LaunchedEffect(error) {
         error?.let {
