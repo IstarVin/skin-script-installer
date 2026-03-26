@@ -188,6 +188,19 @@ class ScriptDetailViewModel @Inject constructor(
     }
 
     fun install() {
+        performInstall(_selectedUserId.value)
+    }
+
+    fun installForUser(userId: Int) {
+        if (userId !in _eligibleUserIds.value) {
+            _error.value = "Selected user is not eligible"
+            return
+        }
+        _selectedUserId.value = userId
+        performInstall(userId)
+    }
+
+    private fun performInstall(targetUserId: Int) {
         viewModelScope.launch {
             if (_eligibleUserIds.value.isEmpty()) {
                 _error.value = "No Mobile Legends user found in /storage/emulated"
@@ -198,7 +211,7 @@ class ScriptDetailViewModel @Inject constructor(
             _error.value = null
             installScriptUseCase.resetProgress()
 
-            val result = installScriptUseCase.execute(scriptId, _selectedUserId.value)
+            val result = installScriptUseCase.execute(scriptId, targetUserId)
             result.onSuccess {
                 _installation.value = it
             }.onFailure { e ->

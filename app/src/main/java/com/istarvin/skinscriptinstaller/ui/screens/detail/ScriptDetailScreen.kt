@@ -34,15 +34,17 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
@@ -80,7 +82,7 @@ fun ScriptDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(script?.name ?: "Script Detail") },
+                title = { Text("Script Detail") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -154,6 +156,10 @@ fun ScriptDetailScreen(
                         installation?.status != "installed" && eligibleUserIds.isNotEmpty()
                 val showUserDropdown = eligibleUserIds.size > 1
                 var isUserMenuExpanded by remember { mutableStateOf(false) }
+                val dropdownRotation by animateFloatAsState(
+                    targetValue = if (isUserMenuExpanded) 180f else 0f,
+                    label = "installUserDropdownRotation"
+                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -181,7 +187,7 @@ fun ScriptDetailScreen(
                                     bottomEnd = 0.dp
                                 )
                             ) {
-                                Text("Install (User $selectedUserId)")
+                                Text("Install")
                             }
 
                             Box(modifier = Modifier.weight(0.2f)) {
@@ -203,11 +209,23 @@ fun ScriptDetailScreen(
                                         bottomStart = 0.dp,
                                         topEnd = 999.dp,
                                         bottomEnd = 999.dp
-                                    )
+                                        ),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                            disabledContainerColor =
+                                                MaterialTheme.colorScheme.surfaceVariant,
+                                            disabledContentColor =
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.ArrowDropDown,
-                                        contentDescription = "Choose install user"
+                                        contentDescription = "Choose install user",
+                                            tint = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.graphicsLayer {
+                                            rotationZ = dropdownRotation
+                                        }
                                     )
                                 }
 
@@ -219,8 +237,8 @@ fun ScriptDetailScreen(
                                         DropdownMenuItem(
                                             text = { Text("User $userId") },
                                             onClick = {
-                                                viewModel.selectInstallUser(userId)
                                                 isUserMenuExpanded = false
+                                                viewModel.installForUser(userId)
                                             }
                                         )
                                     }
@@ -233,7 +251,7 @@ fun ScriptDetailScreen(
                             enabled = canInstall,
                             modifier = Modifier.weight(1f)
                         ) {
-                            Text("Install (User $selectedUserId)")
+                            Text("Install")
                         }
                     }
 
