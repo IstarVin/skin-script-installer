@@ -81,6 +81,9 @@ class ShizukuManager @Inject constructor(
         Shizuku.addBinderReceivedListenerSticky(binderReceivedListener)
         Shizuku.addBinderDeadListener(binderDeadListener)
         Shizuku.addRequestPermissionResultListener(permissionResultListener)
+
+        // Sync current state on startup in case Shizuku is already running.
+        syncStartupState()
     }
 
     fun destroy() {
@@ -96,8 +99,13 @@ class ShizukuManager @Inject constructor(
                 _isPermissionGranted.value = false
                 return
             }
-            _isPermissionGranted.value =
-                Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+            val granted = Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+            _isPermissionGranted.value = granted
+
+            // Auto-connect user service when permission already exists.
+            if (granted && _isShizukuAvailable.value) {
+                bindService()
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error checking permission", e)
             _isPermissionGranted.value = false
@@ -114,6 +122,13 @@ class ShizukuManager @Inject constructor(
 
     fun bindService() {
         if (_isServiceBound.value) return
+        if (!_isShizukuAvailable.value || !_isPermissionGranted.value) {
+            Log.d(
+                TAG,
+                "Skipping bind: shizukuAvailable=${_isShizukuAvailable.value}, permissionGranted=${_isPermissionGranted.value}"
+            )
+            return
+        }
         try {
             val args = Shizuku.UserServiceArgs(
                 ComponentName(
@@ -130,6 +145,20 @@ class ShizukuManager @Inject constructor(
             Shizuku.bindUserService(args, serviceConnection)
         } catch (e: Exception) {
             Log.e(TAG, "Error binding service", e)
+        }
+    }
+
+    private fun syncStartupState() {
+        try {
+            val binderAlive = Shizuku.pingBinder()
+            _isShizukuAvailable.value = binderAlive
+            if (binderAlive) {
+                checkPermission()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error syncing startup state", e)
+            _isShizukuAvailable.value = false
+            _isPermissionGranted.value = false
         }
     }
 
