@@ -219,7 +219,6 @@ class ScriptListViewModel @Inject constructor(
 
                     else -> buildSet {
                         currentExpandedKeys.filterTo(this) { it in allKeys }
-                        addAll(allKeys - currentExpandedKeys)
                     }
                 }
 
@@ -383,4 +382,3 @@ class ScriptListViewModel @Inject constructor(
             }
     }
 }
-
