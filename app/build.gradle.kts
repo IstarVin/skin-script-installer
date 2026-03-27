@@ -20,8 +20,8 @@ android {
         applicationId = "com.istarvin.skinscriptinstaller"
         minSdk = 30
         targetSdk = 36
-        versionCode = 14
-        versionName = "1.3.8"
+        versionCode = 15
+        versionName = "1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
