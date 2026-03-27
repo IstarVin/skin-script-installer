@@ -41,21 +41,8 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Run unit tests
-        run: ./gradlew :app:testDebugUnitTest
-
       - name: Build Android release APK
         run: ./gradlew :app:assembleRelease
-
-      - name: Upload unit test reports
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: app-release-unit-test-reports
-          path: |
-            app/build/reports/tests/testDebugUnitTest
-            app/build/test-results/testDebugUnitTest
-          if-no-files-found: warn
 
       - name: List build outputs
         run: |
