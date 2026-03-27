@@ -357,7 +357,7 @@ private fun ActiveUserSelector(
         )
         Box {
             OutlinedButton(onClick = { expanded = true }) {
-                Text("User $activeUserId")
+                Text(userLabel(activeUserId))
             }
             DropdownMenu(
                 expanded = expanded,
@@ -365,7 +365,7 @@ private fun ActiveUserSelector(
             ) {
                 eligibleUserIds.forEach { userId ->
                     DropdownMenuItem(
-                        text = { Text("User $userId") },
+                        text = { Text(userLabel(userId)) },
                         onClick = {
                             expanded = false
                             onUserSelected(userId)
@@ -374,6 +374,14 @@ private fun ActiveUserSelector(
                 }
             }
         }
+    }
+}
+
+private fun userLabel(userId: Int): String {
+    return when (userId) {
+        0 -> "Main"
+        999 -> "Smurf"
+        else -> "User $userId"
     }
 }
 
