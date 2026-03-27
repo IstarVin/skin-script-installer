@@ -16,7 +16,7 @@ object BackupCompatibilityRegistry {
             formatVersion = 2,
             minAppVersionCode = 2,
             maxAppVersionCode = Int.MAX_VALUE,
-            supportedDatabaseVersions = setOf(1, 2, 3)
+            supportedDatabaseVersions = setOf(1, 2, 3, 4)
         )
     )
 
