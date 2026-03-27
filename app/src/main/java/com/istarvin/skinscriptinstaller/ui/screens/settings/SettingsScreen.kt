@@ -39,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.istarvin.skinscriptinstaller.ui.theme.AppDimens
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -90,34 +91,34 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(AppDimens.ScreenHorizontal),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceLg)
         ) {
             // Shizuku Status Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationMedium)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(AppDimens.SpaceLg)) {
                     Text(
                         text = "Shizuku",
                         style = MaterialTheme.typography.titleMedium
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
 
                     StatusRow(
                         label = "Shizuku Service",
                         status = if (isShizukuAvailable) "Running" else "Not Running",
                         isPositive = isShizukuAvailable
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
 
                     StatusRow(
                         label = "Permission",
                         status = if (isPermissionGranted) "Granted" else "Not Granted",
                         isPositive = isPermissionGranted
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
 
                     StatusRow(
                         label = "File Service",
@@ -139,13 +140,13 @@ fun SettingsScreen(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(AppDimens.SpaceLg)) {
                         Text(
                             text = "Shizuku is not running",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
                         Text(
                             text = "Please install and start Shizuku from the Play Store or via ADB.",
                             style = MaterialTheme.typography.bodySmall,
@@ -190,20 +191,20 @@ fun SettingsScreen(
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationMedium)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(AppDimens.SpaceLg)) {
                     Text(
                         text = "Backup & Restore",
                         style = MaterialTheme.typography.titleMedium
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
                     Text(
                         text = "Backup includes database records, imported scripts, and overwrite backups.",
                         style = MaterialTheme.typography.bodySmall
                     )
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
 
                     Button(
                         onClick = {
@@ -221,7 +222,7 @@ fun SettingsScreen(
                         Text("Export Backup")
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
 
                     OutlinedButton(
                         onClick = {
@@ -234,9 +235,9 @@ fun SettingsScreen(
                     }
 
                     AnimatedVisibility(visible = isBackupOperationRunning) {
-                        Column(modifier = Modifier.padding(top = 12.dp)) {
+                        Column(modifier = Modifier.padding(top = AppDimens.SpaceMd)) {
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
                             Text(
                                 text = "Processing backup operation...",
                                 style = MaterialTheme.typography.bodySmall
@@ -255,7 +256,7 @@ fun SettingsScreen(
                             } else {
                                 MaterialTheme.colorScheme.primary
                             },
-                            modifier = Modifier.padding(top = 12.dp)
+                            modifier = Modifier.padding(top = AppDimens.SpaceMd)
                         )
                     }
                 }
@@ -264,19 +265,19 @@ fun SettingsScreen(
             // Hero Catalog Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationMedium)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(AppDimens.SpaceLg)) {
                     Text(
                         text = "Hero Catalog",
                         style = MaterialTheme.typography.titleMedium
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
                     Text(
                         text = "Fetch the latest hero list from the MLBB stats API.",
                         style = MaterialTheme.typography.bodySmall
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
                     OutlinedButton(
                         onClick = { viewModel.refreshHeroCatalog() },
                         enabled = !isRefreshingCatalog,
@@ -285,9 +286,9 @@ fun SettingsScreen(
                         Text("Refresh Hero Catalog")
                     }
                     AnimatedVisibility(visible = isRefreshingCatalog) {
-                        Column(modifier = Modifier.padding(top = 12.dp)) {
+                        Column(modifier = Modifier.padding(top = AppDimens.SpaceMd)) {
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
                             Text(
                                 text = "Fetching hero catalog...",
                                 style = MaterialTheme.typography.bodySmall
@@ -305,7 +306,7 @@ fun SettingsScreen(
                             } else {
                                 MaterialTheme.colorScheme.primary
                             },
-                            modifier = Modifier.padding(top = 12.dp)
+                            modifier = Modifier.padding(top = AppDimens.SpaceMd)
                         )
                     }
                 }
@@ -319,7 +320,7 @@ private fun StatusRow(label: String, status: String, isPositive: Boolean) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = AppDimens.SpaceXs),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -335,7 +336,7 @@ private fun StatusRow(label: String, status: String, isPositive: Boolean) {
                     MaterialTheme.colorScheme.primary
                 else
                     MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(AppDimens.IconTiny)
             )
             Text(
                 text = " $status",

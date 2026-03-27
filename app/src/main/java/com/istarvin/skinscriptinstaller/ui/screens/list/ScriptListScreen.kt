@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -39,6 +40,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -67,6 +69,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.istarvin.skinscriptinstaller.ui.components.AppEmptyState
+import com.istarvin.skinscriptinstaller.ui.components.InstallStatusChip
+import com.istarvin.skinscriptinstaller.ui.theme.AppAlpha
+import com.istarvin.skinscriptinstaller.ui.theme.AppDimens
 import coil3.compose.AsyncImage
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -142,12 +148,17 @@ fun ScriptListScreen(
             FloatingActionButton(
                 onClick = {
                     showImportChoiceDialog = true
-                }
+                },
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                elevation = FloatingActionButtonDefaults.elevation(
+                    defaultElevation = AppDimens.ElevationMedium
+                )
             ) {
                 if (isImporting) {
                     CircularProgressIndicator(
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.padding(8.dp)
+                        modifier = Modifier.padding(AppDimens.SpaceSm)
                     )
                 } else {
                     Icon(Icons.Default.Add, contentDescription = "Import Script")
@@ -168,7 +179,10 @@ fun ScriptListScreen(
                     onUserSelected = viewModel::selectActiveUser,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .padding(
+                            horizontal = AppDimens.ScreenHorizontal,
+                            vertical = AppDimens.SpaceSm
+                        )
                 )
             }
 
@@ -176,38 +190,22 @@ fun ScriptListScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = AppDimens.ScreenHorizontal),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Outlined.FolderOpen,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(80.dp)
-                                .padding(bottom = 16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                        )
-                        Text(
-                            text = "No scripts imported",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Tap + to import a skin script folder or ZIP",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    AppEmptyState(
+                        icon = Icons.Outlined.FolderOpen,
+                        title = "No scripts imported",
+                        subtitle = "Tap + to import a skin script folder or ZIP"
+                    )
                 }
             } else {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(top = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(16.dp)
+                        .padding(top = AppDimens.SpaceXs),
+                    verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceSm),
+                    contentPadding = PaddingValues(AppDimens.ScreenHorizontal)
                 ) {
                     items(heroScriptSections, key = { it.key }) { section ->
                         HeroScriptAccordionSection(
@@ -231,18 +229,23 @@ fun ScriptListScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 32.dp, top = 24.dp)
+                        .padding(bottom = AppDimens.SpaceXxl, top = AppDimens.SpaceXl)
                 ) {
                     Text(
                         text = "Import Script",
                         style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                        modifier = Modifier.padding(
+                            horizontal = AppDimens.SpaceXl,
+                            vertical = AppDimens.SpaceSm
+                        )
                     )
                     Text(
                         text = "Choose the format of your skin script",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 16.dp)
+                        modifier = Modifier
+                            .padding(horizontal = AppDimens.SpaceXl)
+                            .padding(bottom = AppDimens.SpaceLg)
                     )
                     
                     ListItem(
@@ -314,10 +317,10 @@ fun ScriptListScreen(
                                 color = MaterialTheme.colorScheme.error,
                                 style = MaterialTheme.typography.bodyMedium
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
                         }
                         Text("Enter the password for this ZIP archive")
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
                         OutlinedTextField(
                             value = zipPasswordText,
                             onValueChange = { zipPasswordText = it },
@@ -463,14 +466,14 @@ private fun ScriptCard(
             .fillMaxWidth()
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(AppDimens.SpaceLg),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -491,7 +494,7 @@ private fun ScriptCard(
                     Text(
                         text = "Uncategorized",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.MutedText)
                     )
                 }
 
@@ -504,9 +507,9 @@ private fun ScriptCard(
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(AppDimens.SpaceSm))
 
-            StatusChip(status = item.status)
+            InstallStatusChip(status = item.status)
 
             IconButton(onClick = onDeleteClick) {
                 Icon(
@@ -533,13 +536,15 @@ private fun HeroScriptAccordionSection(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (section.isExpanded) AppDimens.ElevationMedium else AppDimens.ElevationLow
+        )
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { onToggle(section.key) }
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = AppDimens.SpaceLg, vertical = AppDimens.SpaceMd),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -552,7 +557,7 @@ private fun HeroScriptAccordionSection(
                         heroName = section.title,
                         heroIcon = section.heroIcon
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(AppDimens.SpaceMd))
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
@@ -561,7 +566,7 @@ private fun HeroScriptAccordionSection(
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
+                    Spacer(modifier = Modifier.height(AppDimens.Space2))
                     Text(
                         text = if (section.count == 1) "1 skin script" else "${section.count} skin scripts",
                         style = MaterialTheme.typography.bodySmall,
@@ -589,14 +594,18 @@ private fun HeroScriptAccordionSection(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(
+                        start = AppDimens.SpaceMd,
+                        end = AppDimens.SpaceMd,
+                        bottom = AppDimens.SpaceMd
+                    ),
+                verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceSm)
             ) {
                 if (section.isFlat) {
                     section.flatScripts.forEach { item ->
                         ScriptCard(
                             item = item,
-                            modifier = Modifier.padding(start = 8.dp),
+                            modifier = Modifier.padding(start = AppDimens.SpaceSm),
                             showHeroName = false,
                             onClick = { onScriptClick(item.script.id) },
                             onDeleteClick = { onDeleteClick(item) }
@@ -625,15 +634,16 @@ private fun HeroSectionIcon(
 ) {
     Box(
         modifier = modifier
-            .size(36.dp)
-            .clip(CircleShape),
+            .size(AppDimens.IconHero)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = AppAlpha.SubtleContainer)),
         contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = Icons.Default.Person,
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.SecondaryText)
         )
         if (!heroIcon.isNullOrBlank()) {
             AsyncImage(
@@ -656,15 +666,15 @@ private fun SkinReplacementAccordionSection(
             .fillMaxWidth()
             .animateContentSize(),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable { onToggle(section.key) }
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = AppDimens.SpaceLg, vertical = AppDimens.SpaceMd),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -674,7 +684,7 @@ private fun SkinReplacementAccordionSection(
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Spacer(modifier = Modifier.height(2.dp))
+                Spacer(modifier = Modifier.height(AppDimens.Space2))
                 Text(
                     text = if (section.count == 1) "1 skin script" else "${section.count} skin scripts",
                     style = MaterialTheme.typography.bodySmall,
@@ -701,8 +711,12 @@ private fun SkinReplacementAccordionSection(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(
+                        start = AppDimens.SpaceSm,
+                        end = AppDimens.SpaceSm,
+                        bottom = AppDimens.SpaceSm
+                    ),
+                verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceXs)
             ) {
                 section.scripts.forEach { item ->
                     OldSkinItem(
@@ -729,12 +743,12 @@ private fun OldSkinItem(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = AppDimens.SpaceLg, vertical = AppDimens.SpaceSm),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -745,9 +759,9 @@ private fun OldSkinItem(
                 modifier = Modifier.weight(1f)
             )
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(AppDimens.SpaceSm))
 
-            StatusChip(status = item.status)
+            InstallStatusChip(status = item.status)
 
             IconButton(onClick = onDeleteClick) {
                 Icon(
@@ -757,28 +771,6 @@ private fun OldSkinItem(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun StatusChip(status: String) {
-    val (text, color) = when (status) {
-        "installed" -> "Installed" to MaterialTheme.colorScheme.primary
-        "restored" -> "Restored" to MaterialTheme.colorScheme.tertiary
-        else -> "Not Installed" to MaterialTheme.colorScheme.outline
-    }
-
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = color.copy(alpha = 0.12f)
-        )
-    ) {
-        Text(
-            text = text,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = color
-        )
     }
 }
 

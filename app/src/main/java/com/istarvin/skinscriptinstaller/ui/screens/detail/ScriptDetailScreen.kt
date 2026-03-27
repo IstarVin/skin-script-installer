@@ -57,6 +57,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.istarvin.skinscriptinstaller.ui.components.InstallStatusChip
+import com.istarvin.skinscriptinstaller.ui.theme.AppAlpha
+import com.istarvin.skinscriptinstaller.ui.theme.AppDimens
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -126,8 +129,8 @@ fun ScriptDetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = AppDimens.ScreenHorizontal),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceLg)
         ) {
             // Script info card
             item {
@@ -141,9 +144,9 @@ fun ScriptDetailScreen(
                             else
                                 MaterialTheme.colorScheme.surfaceVariant
                         ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
                     ) {
-                        Column(modifier = Modifier.padding(24.dp)) {
+                        Column(modifier = Modifier.padding(AppDimens.SpaceXl)) {
                             Text(
                                 text = s.name,
                                 style = MaterialTheme.typography.headlineMedium,
@@ -152,67 +155,45 @@ fun ScriptDetailScreen(
                                 else
                                     MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
                             Text(
                                 text = "Imported: ${formatDate(s.importedAt)}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = if (isInstalled)
-                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = AppAlpha.SecondaryText)
                                 else
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.SecondaryText)
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
                             Text(
                                 text = "User scope: User $selectedUserId",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = if (isInstalled)
-                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = AppAlpha.SecondaryText)
                                 else
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.SecondaryText)
                             )
                             installation?.let { inst ->
-                                Spacer(modifier = Modifier.height(12.dp))
-
-                                Card(
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (inst.status == "installed")
-                                            MaterialTheme.colorScheme.primary
-                                        else
-                                            MaterialTheme.colorScheme.tertiary
-                                    ),
-                                    shape = MaterialTheme.shapes.small
-                                ) {
-                                    Text(
-                                        text = inst.status.uppercase(),
-                                        modifier = Modifier.padding(
-                                            horizontal = 8.dp,
-                                            vertical = 4.dp
-                                        ),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = if (inst.status == "installed")
-                                            MaterialTheme.colorScheme.onPrimary
-                                        else
-                                            MaterialTheme.colorScheme.onTertiary
-                                    )
-                                }
+                                Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
+                                InstallStatusChip(status = inst.status)
 
                                 if (inst.status == "installed") {
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
                                     Text(
                                         text = "Installed: ${formatDate(inst.installedAt)}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(
-                                            alpha = 0.8f
+                                            alpha = AppAlpha.SecondaryText
                                         )
                                     )
                                 }
                                 inst.restoredAt?.let { restoredAt ->
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
                                     Text(
                                         text = "Restored: ${formatDate(restoredAt)}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                            alpha = 0.8f
+                                            alpha = AppAlpha.SecondaryText
                                         )
                                     )
                                 }
@@ -243,7 +224,7 @@ fun ScriptDetailScreen(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(AppDimens.SpaceMd)
                 ) {
                     Button(
                         onClick = {
@@ -268,16 +249,17 @@ fun ScriptDetailScreen(
                 }
 
                 if (!isShizukuReady) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
                     ) {
                         Text(
                             text = "⚠ Shizuku is not ready. Open Settings to connect.",
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier.padding(AppDimens.SpaceMd),
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -285,16 +267,17 @@ fun ScriptDetailScreen(
                 }
 
                 if (isShizukuReady && eligibleUserIds.isEmpty()) {
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer
                         ),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
                     ) {
                         Text(
                             text = "No Mobile Legends user found in /storage/emulated",
-                            modifier = Modifier.padding(12.dp),
+                            modifier = Modifier.padding(AppDimens.SpaceMd),
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -315,7 +298,7 @@ fun ScriptDetailScreen(
                             },
                             modifier = Modifier.fillMaxWidth()
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
                         Text(
                             text = "${activeProgress.currentIndex} / ${activeProgress.total}: ${activeProgress.currentFileName}",
                             style = MaterialTheme.typography.bodySmall,
@@ -340,7 +323,7 @@ fun ScriptDetailScreen(
                         .clickable(enabled = node.isDirectory) {
                             viewModel.toggleDirectory(node.id)
                         }
-                        .padding(start = (node.depth * 24).dp, top = 6.dp, bottom = 6.dp),
+                        .padding(start = (node.depth * 24).dp, top = AppDimens.SpaceXs, bottom = AppDimens.SpaceXs),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     val icon = when {
@@ -349,17 +332,17 @@ fun ScriptDetailScreen(
                         else -> Icons.Default.Folder
                     }
                     val iconTint = if (node.isDirectory)
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        MaterialTheme.colorScheme.primary.copy(alpha = AppAlpha.SecondaryText)
                     else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.MutedText)
 
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(AppDimens.IconSmall),
                         tint = iconTint
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(AppDimens.SpaceSm))
                     Text(
                         text = node.name,
                         style = MaterialTheme.typography.bodySmall,
@@ -369,7 +352,7 @@ fun ScriptDetailScreen(
             }
 
             // Bottom spacer
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item { Spacer(modifier = Modifier.height(AppDimens.SpaceLg)) }
         }
 
         if (showClassifyDialog) {
@@ -405,9 +388,9 @@ private fun ClassificationCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(AppDimens.SpaceLg)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -418,46 +401,43 @@ private fun ClassificationCard(
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                IconButton(onClick = onEditClick, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = onEditClick, modifier = Modifier.size(AppDimens.IconHero)) {
                     Icon(
                         Icons.Default.Edit,
                         contentDescription = "Edit classification",
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(AppDimens.IconSmall),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
             if (heroName != null) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
                 Text(
                     text = heroName,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
                 if (originalSkinName != null && replacementSkinName != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
                     Text(
                         text = "$originalSkinName → $replacementSkinName",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                TextButton(
-                    onClick = onClearClick,
-                    modifier = Modifier.padding(0.dp)
-                ) {
+                Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
+                TextButton(onClick = onClearClick) {
                     Text("Clear", style = MaterialTheme.typography.labelSmall)
                 }
             } else {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
                 Text(
                     text = "Uncategorized",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.MutedText)
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
                 OutlinedButton(onClick = onEditClick) {
                     Text("Classify this script")
                 }
@@ -553,8 +533,8 @@ private fun ClassifyScriptDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(top = AppDimens.SpaceSm),
+                verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceLg)
             ) {
                 Text(
                     text = "Assign a hero and skin information to this script",
@@ -591,9 +571,9 @@ private fun ClassifyScriptDialog(
                                     text = {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(AppDimens.SpaceSm)
                                         ) {
-                                            Box(modifier = Modifier.size(32.dp)) {
+                                            Box(modifier = Modifier.size(AppDimens.IconHero)) {
                                                 Icon(
                                                     imageVector = Icons.Default.Person,
                                                     contentDescription = null,
@@ -628,7 +608,7 @@ private fun ClassifyScriptDialog(
                         Text(
                             text = suggestionLabel,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = AppAlpha.SecondaryText)
                         )
                     }
                 } // end hero Column
