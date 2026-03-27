@@ -22,15 +22,19 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.istarvin.skinscriptinstaller.ui.theme.AppDimens
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.delay
 
 object SettingsTestTags {
     const val ShizukuBlockingNotice = "settings-shizuku-blocking-notice"
@@ -39,6 +43,9 @@ object SettingsTestTags {
     const val MaintenanceCatalog = "settings-maintenance-catalog"
     const val MaintenanceUpdates = "settings-maintenance-updates"
 }
+
+private const val UpToDateMessage = "App is up to date"
+private const val UpdateMessageDismissDelayMillis = 4_000L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,8 +63,18 @@ fun SettingsScreen(
     val backupMessage by viewModel.backupMessage.collectAsState()
     val isRefreshingCatalog by viewModel.isRefreshingCatalog.collectAsState()
     val catalogRefreshMessage by viewModel.catalogRefreshMessage.collectAsState()
+    var visibleUpdateCheckMessage by remember { mutableStateOf<String?>(null) }
 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss") }
+
+    LaunchedEffect(updateCheckMessage, isCheckingForUpdates) {
+        visibleUpdateCheckMessage = updateCheckMessage
+        if (!isCheckingForUpdates && updateCheckMessage == UpToDateMessage) {
+            delay(UpdateMessageDismissDelayMillis)
+            visibleUpdateCheckMessage = null
+        }
+    }
+
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -102,7 +119,7 @@ fun SettingsScreen(
         catalogRefreshMessage = catalogRefreshMessage,
         onCheckForUpdates = onCheckForUpdates,
         isCheckingForUpdates = isCheckingForUpdates,
-        updateCheckMessage = updateCheckMessage
+        updateCheckMessage = visibleUpdateCheckMessage
     )
 }
 
