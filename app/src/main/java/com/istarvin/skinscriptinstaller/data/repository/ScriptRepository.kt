@@ -136,6 +136,18 @@ class ScriptRepository @Inject constructor(
 
     suspend fun getAllSkinsOnce(): List<Skin> = skinDao.getAllOnce()
 
+    suspend fun deleteHero(id: Long) = heroDao.deleteById(id)
+
+    suspend fun updateHeroName(id: Long, name: String) = heroDao.updateName(id, name)
+
+    suspend fun deleteSkin(id: Long) = skinDao.deleteById(id)
+
+    suspend fun updateSkinName(id: Long, name: String) = skinDao.updateName(id, name)
+
+    suspend fun countScriptsByHeroId(heroId: Long): Int = heroDao.countScriptsByHeroId(heroId)
+
+    suspend fun countScriptsBySkinId(skinId: Long): Int = skinDao.countScriptsBySkinId(skinId)
+
     // --- Script Classification ---
 
     suspend fun updateScript(script: SkinScript) = skinScriptDao.update(script)

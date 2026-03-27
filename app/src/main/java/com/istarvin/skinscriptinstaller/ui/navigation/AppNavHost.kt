@@ -18,6 +18,7 @@ import com.istarvin.skinscriptinstaller.ui.screens.list.ScriptListScreen
 import com.istarvin.skinscriptinstaller.ui.screens.settings.SettingsScreen
 import com.istarvin.skinscriptinstaller.ui.screens.settings.UpdateCheckViewModel
 import com.istarvin.skinscriptinstaller.ui.screens.settings.UpdateState
+import com.istarvin.skinscriptinstaller.ui.screens.catalogeditor.CatalogEditorScreen
 import androidx.core.net.toUri
 
 @Composable
@@ -83,7 +84,16 @@ fun AppNavHost(navController: NavHostController) {
                 onNavigateBack = { navController.popBackStack() },
                 onCheckForUpdates = { updateViewModel.checkForUpdate() },
                 isCheckingForUpdates = isCheckingForUpdates,
-                updateCheckMessage = updateCheckMessage
+                updateCheckMessage = updateCheckMessage,
+                onEditCatalog = {
+                    navController.navigate(Screen.CatalogEditor.route)
+                }
+            )
+        }
+
+        composable(Screen.CatalogEditor.route) {
+            CatalogEditorScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
     }

@@ -30,6 +30,15 @@ interface SkinDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllReplace(skins: List<Skin>)
 
+    @Query("DELETE FROM skins WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("UPDATE skins SET name = :name WHERE id = :id")
+    suspend fun updateName(id: Long, name: String)
+
+    @Query("SELECT COUNT(*) FROM skin_scripts WHERE originalSkinId = :skinId OR replacementSkinId = :skinId")
+    suspend fun countScriptsBySkinId(skinId: Long): Int
+
     @Query("DELETE FROM skins")
     suspend fun clearAll()
 }

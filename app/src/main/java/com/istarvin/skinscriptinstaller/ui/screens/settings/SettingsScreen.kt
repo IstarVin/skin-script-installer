@@ -56,6 +56,7 @@ fun SettingsScreen(
     onCheckForUpdates: () -> Unit = {},
     isCheckingForUpdates: Boolean = false,
     updateCheckMessage: String? = null,
+    onEditCatalog: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val isShizukuAvailable by viewModel.isShizukuAvailable.collectAsState()
@@ -130,6 +131,7 @@ fun SettingsScreen(
         onRefreshHeroCatalog = viewModel::refreshHeroCatalog,
         isRefreshingCatalog = isRefreshingCatalog,
         catalogRefreshMessage = catalogRefreshMessage,
+        onEditCatalog = onEditCatalog,
         onCheckForUpdates = onCheckForUpdates,
         isCheckingForUpdates = isCheckingForUpdates,
         updateCheckMessage = visibleUpdateCheckMessage
@@ -159,6 +161,7 @@ fun SettingsContent(
     onRefreshHeroCatalog: () -> Unit,
     isRefreshingCatalog: Boolean,
     catalogRefreshMessage: String?,
+    onEditCatalog: () -> Unit,
     onCheckForUpdates: () -> Unit,
     isCheckingForUpdates: Boolean,
     updateCheckMessage: String?
@@ -201,6 +204,11 @@ fun SettingsContent(
                 label = "Refresh Hero Catalog",
                 onClick = onRefreshHeroCatalog,
                 enabled = !isRefreshingCatalog,
+                style = SettingsActionStyle.Outlined
+            ),
+            secondaryAction = SettingsActionButton(
+                label = "Edit Catalog",
+                onClick = onEditCatalog,
                 style = SettingsActionStyle.Outlined
             ),
             isInProgress = isRefreshingCatalog,

@@ -36,6 +36,15 @@ interface HeroDao {
     @Query("UPDATE heroes SET heroIcon = :heroIcon WHERE name = :name")
     suspend fun updateHeroIconByName(name: String, heroIcon: String)
 
+    @Query("DELETE FROM heroes WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("UPDATE heroes SET name = :name WHERE id = :id")
+    suspend fun updateName(id: Long, name: String)
+
+    @Query("SELECT COUNT(*) FROM skin_scripts WHERE heroId = :heroId")
+    suspend fun countScriptsByHeroId(heroId: Long): Int
+
     @Query("DELETE FROM heroes")
     suspend fun clearAll()
 }

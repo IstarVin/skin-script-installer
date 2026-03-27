@@ -10,5 +10,6 @@ sealed class Screen(val route: String) {
             "script_detail/$scriptId?autoClassify=$autoClassify"
     }
     data object Settings : Screen("settings")
+    data object CatalogEditor : Screen("catalog_editor")
 }
 
