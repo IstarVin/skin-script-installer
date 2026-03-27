@@ -26,14 +26,14 @@ class CheckForUpdateUseCaseTest {
     @Test
     fun `execute returns newer release with apk asset url`() = runTest {
         coEvery { gitHubApiService.getLatestRelease() } returns GitHubReleaseDto(
-            tagName = "v1.3.9",
-            htmlUrl = "https://github.com/IstarVin/skin-script-installer/releases/tag/v1.3.9",
+            tagName = "v99.0.0",
+            htmlUrl = "https://github.com/IstarVin/skin-script-installer/releases/tag/v99.0.0",
             body = "Bug fixes",
             assets = listOf(
                 GitHubReleaseAssetDto(
-                    name = "SkinScriptInstaller-1.3.9.apk",
+                    name = "SkinScriptInstaller-99.0.0.apk",
                     contentType = "application/vnd.android.package-archive",
-                    browserDownloadUrl = "https://github.com/IstarVin/skin-script-installer/releases/download/v1.3.9/app.apk"
+                    browserDownloadUrl = "https://github.com/IstarVin/skin-script-installer/releases/download/v99.0.0/app.apk"
                 )
             )
         )
@@ -42,9 +42,9 @@ class CheckForUpdateUseCaseTest {
         val releaseInfo = result.getOrNull()
 
         assertNotNull(releaseInfo)
-        assertEquals("1.3.9", releaseInfo?.version)
+        assertEquals("99.0.0", releaseInfo?.version)
         assertEquals(
-            "https://github.com/IstarVin/skin-script-installer/releases/download/v1.3.9/app.apk",
+            "https://github.com/IstarVin/skin-script-installer/releases/download/v99.0.0/app.apk",
             releaseInfo?.apkUrl
         )
     }
