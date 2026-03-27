@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
+import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -46,7 +47,30 @@ interface InstallationDao {
     @Query("SELECT * FROM installations ORDER BY id ASC")
     suspend fun getAllOnce(): List<Installation>
 
+    @Query(
+        """
+        SELECT latest.id AS installationId, script.id AS scriptId, script.name AS scriptName
+        FROM skin_scripts AS script
+        JOIN installations AS latest ON latest.id = (
+            SELECT inner_installation.id
+            FROM installations AS inner_installation
+            WHERE inner_installation.scriptId = script.id
+                AND inner_installation.userId = :userId
+            ORDER BY inner_installation.installedAt DESC, inner_installation.id DESC
+            LIMIT 1
+        )
+        WHERE script.heroId = :heroId
+            AND script.id != :excludeScriptId
+            AND latest.status = 'installed'
+        ORDER BY latest.installedAt DESC, latest.id DESC
+        """
+    )
+    suspend fun getActiveConflictsByHeroId(
+        heroId: Long,
+        userId: Int,
+        excludeScriptId: Long
+    ): List<HeroInstallationConflict>
+
     @Query("DELETE FROM installations")
     suspend fun clearAll()
 }
-

@@ -8,6 +8,7 @@ import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
+import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.domain.ClassifyScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
@@ -41,6 +42,13 @@ data class FileTreeNode(
 data class DetailZipPasswordPrompt(
     val zipUri: Uri,
     val errorMessage: String? = null
+)
+
+data class InstallConflictWarningState(
+    val heroName: String,
+    val targetScriptName: String,
+    val targetUserId: Int,
+    val conflicts: List<HeroInstallationConflict>
 )
 
 @HiltViewModel
@@ -81,6 +89,10 @@ class ScriptDetailViewModel @Inject constructor(
 
     private val _zipPasswordPrompt = MutableStateFlow<DetailZipPasswordPrompt?>(null)
     val zipPasswordPrompt: StateFlow<DetailZipPasswordPrompt?> = _zipPasswordPrompt.asStateFlow()
+
+    private val _installConflictWarning = MutableStateFlow<InstallConflictWarningState?>(null)
+    val installConflictWarning: StateFlow<InstallConflictWarningState?> =
+        _installConflictWarning.asStateFlow()
 
     // Classification state
     private val _heroName = MutableStateFlow<String?>(null)
@@ -244,7 +256,7 @@ class ScriptDetailViewModel @Inject constructor(
     }
 
     fun install() {
-        performInstall(_selectedUserId.value)
+        requestInstall(_selectedUserId.value)
     }
 
     fun installForUser(userId: Int) {
@@ -253,30 +265,106 @@ class ScriptDetailViewModel @Inject constructor(
             return
         }
         _selectedUserId.value = userId
-        performInstall(userId)
+        requestInstall(userId)
     }
 
-    private fun performInstall(targetUserId: Int) {
+    private fun requestInstall(targetUserId: Int) {
         viewModelScope.launch {
             if (userSelectionManager.eligibleUserIds.value.isEmpty()) {
                 _error.value = "No Mobile Legends user found in /storage/emulated"
                 return@launch
             }
 
+            val currentScript = requireClassifiedScript() ?: return@launch
             userSelectionManager.selectUser(targetUserId)
+            val conflicts = repository.getActiveHeroInstallationConflicts(
+                heroId = currentScript.heroId!!,
+                userId = targetUserId,
+                excludeScriptId = currentScript.id
+            )
 
-            _isOperating.value = true
-            _error.value = null
-            installScriptUseCase.resetProgress()
-
-            val result = installScriptUseCase.execute(scriptId, targetUserId)
-            result.onSuccess {
-                _installation.value = it
-            }.onFailure { e ->
-                _error.value = e.message ?: "Install failed"
+            if (conflicts.isNotEmpty()) {
+                _installConflictWarning.value = InstallConflictWarningState(
+                    heroName = _heroName.value ?: repository.getHeroById(currentScript.heroId)?.name
+                    ?: "this hero",
+                    targetScriptName = currentScript.name,
+                    targetUserId = targetUserId,
+                    conflicts = conflicts
+                )
+                return@launch
             }
-            _isOperating.value = false
+
+            executeInstallFlow(targetUserId)
         }
+    }
+
+    fun dismissInstallConflictWarning() {
+        _installConflictWarning.value = null
+    }
+
+    fun confirmInstallConflictWarning() {
+        val warning = _installConflictWarning.value ?: return
+        _installConflictWarning.value = null
+        viewModelScope.launch {
+            executeInstallFlow(
+                targetUserId = warning.targetUserId,
+                conflictsToRestore = warning.conflicts
+            )
+        }
+    }
+
+    private suspend fun executeInstallFlow(
+        targetUserId: Int,
+        conflictsToRestore: List<HeroInstallationConflict> = emptyList()
+    ) {
+        val currentScript = requireClassifiedScript() ?: return
+
+        if (userSelectionManager.eligibleUserIds.value.isEmpty()) {
+            _error.value = "No Mobile Legends user found in /storage/emulated"
+            return
+        }
+
+        userSelectionManager.selectUser(targetUserId)
+
+        _isOperating.value = true
+        _error.value = null
+        restoreScriptUseCase.resetProgress()
+        installScriptUseCase.resetProgress()
+
+        for (conflict in conflictsToRestore) {
+            val restoreResult = restoreScriptUseCase.execute(conflict.installationId)
+            if (restoreResult.isFailure) {
+                _error.value = restoreResult.exceptionOrNull()?.message
+                    ?: "Install failed during restore"
+                _installation.value = repository.getLatestInstallation(scriptId, targetUserId)
+                _isOperating.value = false
+                return
+            }
+        }
+
+        val result = installScriptUseCase.execute(currentScript.id, targetUserId)
+        result.onSuccess {
+            _installation.value = it
+        }.onFailure { e ->
+            _error.value = e.message ?: "Install failed"
+            _installation.value = repository.getLatestInstallation(scriptId, targetUserId)
+        }
+        _isOperating.value = false
+    }
+
+    private fun requireClassifiedScript(): SkinScript? {
+        val currentScript = _script.value
+        if (currentScript == null) {
+            _error.value = "Script not found"
+            return null
+        }
+
+        if (currentScript.heroId == null) {
+            _error.value = "Classify this script before installing"
+            return null
+        }
+
+        return currentScript
     }
 
     fun restore() {
@@ -317,6 +405,7 @@ class ScriptDetailViewModel @Inject constructor(
                 return@launch
             }
 
+            requireClassifiedScript() ?: return@launch
             val inst = repository.getLatestInstallation(scriptId, targetUserId)
 
             if (inst == null || inst.status != "installed") {

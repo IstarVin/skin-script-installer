@@ -58,6 +58,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.istarvin.skinscriptinstaller.ui.components.ClassifyScriptDialog
+import com.istarvin.skinscriptinstaller.ui.components.HeroInstallConflictDialog
 import com.istarvin.skinscriptinstaller.ui.components.ImportChoiceBottomSheet
 import com.istarvin.skinscriptinstaller.ui.components.InstallStatusChip
 import com.istarvin.skinscriptinstaller.ui.components.ZipPasswordDialog
@@ -86,6 +87,7 @@ fun ScriptDetailScreen(
     val isShizukuReady by viewModel.isShizukuReady.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
     val zipPasswordPrompt by viewModel.zipPasswordPrompt.collectAsState()
+    val installConflictWarning by viewModel.installConflictWarning.collectAsState()
     val error by viewModel.error.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -472,6 +474,17 @@ fun ScriptDetailScreen(
                     zipPasswordText = ""
                     viewModel.dismissZipPasswordPrompt()
                 }
+            )
+        }
+
+        installConflictWarning?.let { warning ->
+            HeroInstallConflictDialog(
+                heroName = warning.heroName,
+                targetScriptName = warning.targetScriptName,
+                targetUserId = warning.targetUserId,
+                conflictingScriptNames = warning.conflicts.map { it.scriptName },
+                onProceed = viewModel::confirmInstallConflictWarning,
+                onDismiss = viewModel::dismissInstallConflictWarning
             )
         }
     }

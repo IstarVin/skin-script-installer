@@ -9,6 +9,7 @@ import com.istarvin.skinscriptinstaller.data.db.AppDatabase
 import com.istarvin.skinscriptinstaller.data.db.entity.InstalledFile
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
+import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import io.mockk.*
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -132,6 +133,39 @@ class ScriptRepositoryTest {
 
         val result = repository.getInstallationById(5L)
         assertEquals(installation, result)
+    }
+
+    @Test
+    fun `getActiveHeroInstallationConflicts delegates to dao`() = runTest {
+        val conflicts = listOf(
+            HeroInstallationConflict(
+                installationId = 11L,
+                scriptId = 2L,
+                scriptName = "Miya Epic"
+            )
+        )
+        coEvery {
+            installationDao.getActiveConflictsByHeroId(
+                heroId = 1L,
+                userId = 0,
+                excludeScriptId = 99L
+            )
+        } returns conflicts
+
+        val result = repository.getActiveHeroInstallationConflicts(
+            heroId = 1L,
+            userId = 0,
+            excludeScriptId = 99L
+        )
+
+        assertEquals(conflicts, result)
+        coVerify {
+            installationDao.getActiveConflictsByHeroId(
+                heroId = 1L,
+                userId = 0,
+                excludeScriptId = 99L
+            )
+        }
     }
 
     @Test

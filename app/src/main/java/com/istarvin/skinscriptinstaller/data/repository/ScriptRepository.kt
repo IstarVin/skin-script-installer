@@ -11,6 +11,7 @@ import com.istarvin.skinscriptinstaller.data.db.entity.InstalledFile
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
+import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -53,6 +54,17 @@ class ScriptRepository @Inject constructor(
 
     suspend fun getInstallationById(id: Long): Installation? =
         installationDao.getById(id)
+
+    suspend fun getActiveHeroInstallationConflicts(
+        heroId: Long,
+        userId: Int,
+        excludeScriptId: Long
+    ): List<HeroInstallationConflict> =
+        installationDao.getActiveConflictsByHeroId(
+            heroId = heroId,
+            userId = userId,
+            excludeScriptId = excludeScriptId
+        )
 
     fun getLatestInstallations(): Flow<List<Installation>> =
         installationDao.getLatestInstallations()
@@ -158,4 +170,3 @@ class ScriptRepository @Inject constructor(
         }
     }
 }
-

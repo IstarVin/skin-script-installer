@@ -5,9 +5,11 @@ import com.istarvin.skinscriptinstaller.IFileService
 import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
+import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
 import com.istarvin.skinscriptinstaller.domain.ClassifyScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.InstallProgress
 import com.istarvin.skinscriptinstaller.domain.InstallScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
@@ -38,6 +40,7 @@ class ScriptDetailViewModelTest {
     private lateinit var repository: ScriptRepository
     private lateinit var activeUserStore: ActiveUserStore
     private lateinit var userSelectionManager: UserSelectionManager
+    private lateinit var importScriptUseCase: ImportScriptUseCase
     private lateinit var installScriptUseCase: InstallScriptUseCase
     private lateinit var restoreScriptUseCase: RestoreScriptUseCase
     private lateinit var classifyScriptUseCase: ClassifyScriptUseCase
@@ -58,6 +61,7 @@ class ScriptDetailViewModelTest {
         savedStateHandle = SavedStateHandle(mapOf("scriptId" to 1L))
         repository = mockk(relaxed = true)
         activeUserStore = mockk(relaxed = true)
+        importScriptUseCase = mockk(relaxed = true)
         installScriptUseCase = mockk(relaxed = true)
         restoreScriptUseCase = mockk(relaxed = true)
         classifyScriptUseCase = mockk(relaxed = true)
@@ -68,6 +72,8 @@ class ScriptDetailViewModelTest {
         every { shizukuManager.isServiceBound } returns isServiceBoundFlow
         every { installScriptUseCase.progress } returns installProgressFlow
         every { restoreScriptUseCase.progress } returns restoreProgressFlow
+        every { repository.getAllHeroes() } returns flowOf(emptyList())
+        coEvery { repository.getActiveHeroInstallationConflicts(any(), any(), any()) } returns emptyList()
 
         userSelectionManager = UserSelectionManager(activeUserStore, shizukuManager)
     }
@@ -83,7 +89,8 @@ class ScriptDetailViewModelTest {
         }
         return ScriptDetailViewModel(
             savedStateHandle, repository, userSelectionManager,
-            installScriptUseCase, restoreScriptUseCase, classifyScriptUseCase, shizukuManager
+            importScriptUseCase, installScriptUseCase, restoreScriptUseCase,
+            classifyScriptUseCase, shizukuManager
         )
     }
 
@@ -174,7 +181,12 @@ class ScriptDetailViewModelTest {
 
     @Test
     fun `install calls InstallScriptUseCase with correct scriptId and userId`() = runTest {
-        val script = SkinScript(id = 1L, name = "Test", storagePath = tempFolder.root.absolutePath)
+        val script = SkinScript(
+            id = 1L,
+            name = "Test",
+            storagePath = tempFolder.root.absolutePath,
+            heroId = 1L
+        )
         coEvery { repository.getScriptById(1L) } returns script
 
         val fileService = mockk<IFileService>(relaxed = true)
@@ -192,6 +204,25 @@ class ScriptDetailViewModelTest {
 
         coVerify { installScriptUseCase.execute(1L, 0) }
         assertEquals(installation, vm.installation.value)
+    }
+
+    @Test
+    fun `install blocks unclassified scripts`() = runTest {
+        val script = SkinScript(id = 1L, name = "Test", storagePath = tempFolder.root.absolutePath)
+        coEvery { repository.getScriptById(1L) } returns script
+
+        val fileService = mockk<IFileService>(relaxed = true)
+        every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
+        fileServiceFlow.value = fileService
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.install()
+        advanceUntilIdle()
+
+        assertEquals("Classify this script before installing", vm.error.value)
+        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any()) }
     }
 
     @Test
@@ -214,7 +245,12 @@ class ScriptDetailViewModelTest {
 
     @Test
     fun `install sets error on failure`() = runTest {
-        val script = SkinScript(id = 1L, name = "Test", storagePath = tempFolder.root.absolutePath)
+        val script = SkinScript(
+            id = 1L,
+            name = "Test",
+            storagePath = tempFolder.root.absolutePath,
+            heroId = 1L
+        )
         coEvery { repository.getScriptById(1L) } returns script
 
         val fileService = mockk<IFileService>(relaxed = true)
@@ -230,6 +266,167 @@ class ScriptDetailViewModelTest {
         advanceUntilIdle()
 
         assertEquals("Install error", vm.error.value)
+    }
+
+    @Test
+    fun `install with hero conflict opens warning and does not install`() = runTest {
+        val script = SkinScript(
+            id = 1L,
+            name = "New Miya",
+            storagePath = tempFolder.root.absolutePath,
+            heroId = 1L
+        )
+        val conflicts = listOf(
+            HeroInstallationConflict(
+                installationId = 20L,
+                scriptId = 2L,
+                scriptName = "Old Miya"
+            )
+        )
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery { repository.getHeroById(1L) } returns Hero(id = 1L, name = "Miya")
+        coEvery { repository.getActiveHeroInstallationConflicts(1L, 0, 1L) } returns conflicts
+
+        val fileService = mockk<IFileService>(relaxed = true)
+        every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
+        fileServiceFlow.value = fileService
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.install()
+        advanceUntilIdle()
+
+        assertEquals("Miya", vm.installConflictWarning.value?.heroName)
+        assertEquals("New Miya", vm.installConflictWarning.value?.targetScriptName)
+        assertEquals(conflicts, vm.installConflictWarning.value?.conflicts)
+        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any()) }
+    }
+
+    @Test
+    fun `dismissInstallConflictWarning clears warning state`() = runTest {
+        val script = SkinScript(
+            id = 1L,
+            name = "New Miya",
+            storagePath = tempFolder.root.absolutePath,
+            heroId = 1L
+        )
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery { repository.getHeroById(1L) } returns Hero(id = 1L, name = "Miya")
+        coEvery {
+            repository.getActiveHeroInstallationConflicts(1L, 0, 1L)
+        } returns listOf(
+            HeroInstallationConflict(
+                installationId = 20L,
+                scriptId = 2L,
+                scriptName = "Old Miya"
+            )
+        )
+
+        val fileService = mockk<IFileService>(relaxed = true)
+        every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
+        fileServiceFlow.value = fileService
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.install()
+        advanceUntilIdle()
+        assertNotNull(vm.installConflictWarning.value)
+
+        vm.dismissInstallConflictWarning()
+
+        assertNull(vm.installConflictWarning.value)
+        coVerify(exactly = 0) { restoreScriptUseCase.execute(any()) }
+        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any()) }
+    }
+
+    @Test
+    fun `confirmInstallConflictWarning restores conflicts then installs`() = runTest {
+        val script = SkinScript(
+            id = 1L,
+            name = "New Miya",
+            storagePath = tempFolder.root.absolutePath,
+            heroId = 1L
+        )
+        val conflicts = listOf(
+            HeroInstallationConflict(
+                installationId = 20L,
+                scriptId = 2L,
+                scriptName = "Old Miya"
+            ),
+            HeroInstallationConflict(
+                installationId = 21L,
+                scriptId = 3L,
+                scriptName = "Older Miya"
+            )
+        )
+        val newInstallation = Installation(id = 30L, scriptId = 1L, userId = 0, status = "installed")
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery { repository.getHeroById(1L) } returns Hero(id = 1L, name = "Miya")
+        coEvery { repository.getActiveHeroInstallationConflicts(1L, 0, 1L) } returns conflicts
+        coEvery { restoreScriptUseCase.execute(20L) } returns Result.success(Unit)
+        coEvery { restoreScriptUseCase.execute(21L) } returns Result.success(Unit)
+        coEvery { installScriptUseCase.execute(1L, 0) } returns Result.success(newInstallation)
+
+        val fileService = mockk<IFileService>(relaxed = true)
+        every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
+        fileServiceFlow.value = fileService
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.install()
+        advanceUntilIdle()
+        vm.confirmInstallConflictWarning()
+        advanceUntilIdle()
+
+        coVerify(ordering = Ordering.ORDERED) {
+            restoreScriptUseCase.execute(20L)
+            restoreScriptUseCase.execute(21L)
+            installScriptUseCase.execute(1L, 0)
+        }
+        assertNull(vm.installConflictWarning.value)
+        assertEquals(newInstallation, vm.installation.value)
+    }
+
+    @Test
+    fun `confirmInstallConflictWarning stops when restore fails`() = runTest {
+        val script = SkinScript(
+            id = 1L,
+            name = "New Miya",
+            storagePath = tempFolder.root.absolutePath,
+            heroId = 1L
+        )
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery { repository.getHeroById(1L) } returns Hero(id = 1L, name = "Miya")
+        coEvery {
+            repository.getActiveHeroInstallationConflicts(1L, 0, 1L)
+        } returns listOf(
+            HeroInstallationConflict(
+                installationId = 20L,
+                scriptId = 2L,
+                scriptName = "Old Miya"
+            )
+        )
+        coEvery { restoreScriptUseCase.execute(20L) } returns Result.failure(Exception("Restore error"))
+        coEvery { repository.getLatestInstallation(1L, 0) } returns null
+
+        val fileService = mockk<IFileService>(relaxed = true)
+        every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
+        fileServiceFlow.value = fileService
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.install()
+        advanceUntilIdle()
+        vm.confirmInstallConflictWarning()
+        advanceUntilIdle()
+
+        assertEquals("Restore error", vm.error.value)
+        coVerify { restoreScriptUseCase.execute(20L) }
+        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any()) }
     }
 
     @Test
@@ -255,7 +452,12 @@ class ScriptDetailViewModelTest {
 
     @Test
     fun `reinstall restores first then installs`() = runTest {
-        val script = SkinScript(id = 1L, name = "Test", storagePath = tempFolder.root.absolutePath)
+        val script = SkinScript(
+            id = 1L,
+            name = "Test",
+            storagePath = tempFolder.root.absolutePath,
+            heroId = 1L
+        )
         val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = "installed")
         coEvery { repository.getScriptById(1L) } returns script
         coEvery { repository.getLatestInstallation(1L, 0) } returns installation
@@ -282,7 +484,12 @@ class ScriptDetailViewModelTest {
 
     @Test
     fun `reinstall fails if no installed version`() = runTest {
-        val script = SkinScript(id = 1L, name = "Test", storagePath = tempFolder.root.absolutePath)
+        val script = SkinScript(
+            id = 1L,
+            name = "Test",
+            storagePath = tempFolder.root.absolutePath,
+            heroId = 1L
+        )
         coEvery { repository.getScriptById(1L) } returns script
         coEvery { repository.getLatestInstallation(1L, 0) } returns null
 
