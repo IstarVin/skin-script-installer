@@ -6,6 +6,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,6 +49,9 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
+    onCheckForUpdates: () -> Unit = {},
+    isCheckingForUpdates: Boolean = false,
+    updateCheckMessage: String? = null,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val isShizukuAvailable by viewModel.isShizukuAvailable.collectAsState()
@@ -91,7 +96,8 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(AppDimens.ScreenHorizontal),
+                .padding(horizontal = AppDimens.ScreenHorizontal)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceLg)
         ) {
             // Shizuku Status Card
@@ -311,6 +317,53 @@ fun SettingsScreen(
                     }
                 }
             }
+
+            // App Updates Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationMedium)
+            ) {
+                Column(modifier = Modifier.padding(AppDimens.SpaceLg)) {
+                    Text(
+                        text = "App Updates",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
+                    Text(
+                        text = "Check for a newer version on GitHub.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
+                    OutlinedButton(
+                        onClick = onCheckForUpdates,
+                        enabled = !isCheckingForUpdates,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Check for Updates")
+                    }
+                    AnimatedVisibility(visible = isCheckingForUpdates) {
+                        Column(modifier = Modifier.padding(top = AppDimens.SpaceMd)) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                    AnimatedVisibility(visible = updateCheckMessage != null && !isCheckingForUpdates) {
+                        Text(
+                            text = updateCheckMessage.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (updateCheckMessage?.contains("failed", ignoreCase = true) == true ||
+                                updateCheckMessage?.contains("error", ignoreCase = true) == true
+                            ) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                            modifier = Modifier.padding(top = AppDimens.SpaceMd)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(AppDimens.ScreenVertical))
         }
     }
 }
