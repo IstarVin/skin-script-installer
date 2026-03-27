@@ -10,6 +10,7 @@ import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
 import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
 import com.istarvin.skinscriptinstaller.service.InvalidPasswordException
 import com.istarvin.skinscriptinstaller.service.PasswordRequiredException
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
@@ -34,6 +35,7 @@ class ScriptListViewModelTest {
     private lateinit var fetchHeroCatalogUseCase: FetchHeroCatalogUseCase
     private lateinit var activeUserStore: ActiveUserStore
     private lateinit var shizukuManager: ShizukuManager
+    private lateinit var userSelectionManager: UserSelectionManager
 
     private val activeUserIdFlow = MutableStateFlow(0)
     private val fileServiceFlow = MutableStateFlow<IFileService?>(null)
@@ -58,6 +60,8 @@ class ScriptListViewModelTest {
         every { repository.getAllHeroes() } returns flowOf(emptyList())
         every { repository.getLatestInstallations(any<Int>()) } returns flowOf(emptyList())
         coEvery { fetchHeroCatalogUseCase.execute() } returns Result.success(0)
+
+        userSelectionManager = UserSelectionManager(activeUserStore, shizukuManager)
     }
 
     @After
@@ -70,8 +74,7 @@ class ScriptListViewModelTest {
             repository,
             importScriptUseCase,
             restoreScriptUseCase,
-            activeUserStore,
-            shizukuManager,
+            userSelectionManager,
             fetchHeroCatalogUseCase
         )
     }
@@ -357,7 +360,7 @@ class ScriptListViewModelTest {
     }
 
     @Test
-    fun `selectActiveUser delegates to ActiveUserStore`() = runTest {
+    fun `selectActiveUser delegates to UserSelectionManager`() = runTest {
         val fileService = mockk<IFileService>(relaxed = true)
         every { fileService.listEligibleMlUserIds() } returns intArrayOf(0, 10)
         fileServiceFlow.value = fileService

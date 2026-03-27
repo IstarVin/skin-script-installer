@@ -8,11 +8,11 @@ import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
-import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
 import com.istarvin.skinscriptinstaller.domain.ClassifyScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.InstallProgress
 import com.istarvin.skinscriptinstaller.domain.InstallScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,7 +38,7 @@ data class FileTreeNode(
 class ScriptDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: ScriptRepository,
-    private val activeUserStore: ActiveUserStore,
+    private val userSelectionManager: UserSelectionManager,
     private val installScriptUseCase: InstallScriptUseCase,
     private val restoreScriptUseCase: RestoreScriptUseCase,
     private val classifyScriptUseCase: ClassifyScriptUseCase,
@@ -86,8 +86,7 @@ class ScriptDetailViewModel @Inject constructor(
     private val _skinsForSelectedHero = MutableStateFlow<List<Skin>>(emptyList())
     val skinsForSelectedHero: StateFlow<List<Skin>> = _skinsForSelectedHero.asStateFlow()
 
-    private val _eligibleUserIds = MutableStateFlow<List<Int>>(emptyList())
-    val eligibleUserIds: StateFlow<List<Int>> = _eligibleUserIds.asStateFlow()
+    val eligibleUserIds: StateFlow<List<Int>> = userSelectionManager.eligibleUserIds
 
     private val _selectedUserId = MutableStateFlow(0)
     val selectedUserId: StateFlow<Int> = _selectedUserId.asStateFlow()
@@ -104,59 +103,35 @@ class ScriptDetailViewModel @Inject constructor(
     init {
         loadScript()
         observeActiveUser()
-        observeFileService()
+        userSelectionManager.observeFileService(viewModelScope)
     }
 
     private fun observeActiveUser() {
         viewModelScope.launch {
-            activeUserStore.activeUserId.collectLatest { activeUserId ->
+            userSelectionManager.activeUserId.collectLatest { activeUserId ->
                 if (_selectedUserId.value != activeUserId) {
                     _selectedUserId.value = activeUserId
                     loadInstallationForSelectedUser()
                 }
             }
         }
-    }
-
-    private fun observeFileService() {
         viewModelScope.launch {
-            shizukuManager.fileService.collectLatest {
-                refreshEligibleUsers()
+            userSelectionManager.eligibleUserIds.collectLatest {
+                // Sync selected user when eligible users change
+                val current = _selectedUserId.value
+                val eligible = userSelectionManager.eligibleUserIds.value
+                if (eligible.isNotEmpty() && current !in eligible) {
+                    _selectedUserId.value = eligible.first()
+                    loadInstallationForSelectedUser()
+                }
             }
         }
     }
 
-    private fun refreshEligibleUsers() {
-        val service = shizukuManager.fileService.value
-        if (service == null) {
-            _eligibleUserIds.value = emptyList()
-            _selectedUserId.value = 0
-            return
-        }
-
-        val detected = try {
-            service.listEligibleMlUserIds().toList().distinct().sorted()
-        } catch (_: Exception) {
-            emptyList()
-        }
-
-        _eligibleUserIds.value = detected
-
-        _selectedUserId.value = when {
-            detected.isEmpty() -> 0
-            _selectedUserId.value in detected -> _selectedUserId.value
-            0 in detected -> 0
-            else -> detected.first()
-        }
-
-        activeUserStore.setActiveUser(_selectedUserId.value)
-        loadInstallationForSelectedUser()
-    }
-
     fun selectInstallUser(userId: Int) {
-        if (userId in _eligibleUserIds.value) {
+        if (userId in userSelectionManager.eligibleUserIds.value) {
             _selectedUserId.value = userId
-            activeUserStore.setActiveUser(userId)
+            userSelectionManager.selectUser(userId)
             loadInstallationForSelectedUser()
         }
     }
@@ -256,7 +231,7 @@ class ScriptDetailViewModel @Inject constructor(
     }
 
     fun installForUser(userId: Int) {
-        if (userId !in _eligibleUserIds.value) {
+        if (userId !in userSelectionManager.eligibleUserIds.value) {
             _error.value = "Selected user is not eligible"
             return
         }
@@ -266,12 +241,12 @@ class ScriptDetailViewModel @Inject constructor(
 
     private fun performInstall(targetUserId: Int) {
         viewModelScope.launch {
-            if (_eligibleUserIds.value.isEmpty()) {
+            if (userSelectionManager.eligibleUserIds.value.isEmpty()) {
                 _error.value = "No Mobile Legends user found in /storage/emulated"
                 return@launch
             }
 
-            activeUserStore.setActiveUser(targetUserId)
+            userSelectionManager.selectUser(targetUserId)
 
             _isOperating.value = true
             _error.value = null
@@ -310,7 +285,7 @@ class ScriptDetailViewModel @Inject constructor(
     }
 
     fun reinstallForUser(userId: Int) {
-        if (userId !in _eligibleUserIds.value) {
+        if (userId !in userSelectionManager.eligibleUserIds.value) {
             _error.value = "Selected user is not eligible"
             return
         }
@@ -320,7 +295,7 @@ class ScriptDetailViewModel @Inject constructor(
 
     private fun performReinstall(targetUserId: Int) {
         viewModelScope.launch {
-            if (_eligibleUserIds.value.isEmpty()) {
+            if (userSelectionManager.eligibleUserIds.value.isEmpty()) {
                 _error.value = "No Mobile Legends user found in /storage/emulated"
                 return@launch
             }
@@ -332,7 +307,7 @@ class ScriptDetailViewModel @Inject constructor(
                 return@launch
             }
 
-            activeUserStore.setActiveUser(targetUserId)
+            userSelectionManager.selectUser(targetUserId)
 
             _isOperating.value = true
             _error.value = null

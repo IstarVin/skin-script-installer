@@ -11,6 +11,7 @@ import com.istarvin.skinscriptinstaller.domain.ClassifyScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.InstallProgress
 import com.istarvin.skinscriptinstaller.domain.InstallScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +37,7 @@ class ScriptDetailViewModelTest {
     private lateinit var savedStateHandle: SavedStateHandle
     private lateinit var repository: ScriptRepository
     private lateinit var activeUserStore: ActiveUserStore
+    private lateinit var userSelectionManager: UserSelectionManager
     private lateinit var installScriptUseCase: InstallScriptUseCase
     private lateinit var restoreScriptUseCase: RestoreScriptUseCase
     private lateinit var classifyScriptUseCase: ClassifyScriptUseCase
@@ -66,6 +68,8 @@ class ScriptDetailViewModelTest {
         every { shizukuManager.isServiceBound } returns isServiceBoundFlow
         every { installScriptUseCase.progress } returns installProgressFlow
         every { restoreScriptUseCase.progress } returns restoreProgressFlow
+
+        userSelectionManager = UserSelectionManager(activeUserStore, shizukuManager)
     }
 
     @After
@@ -78,7 +82,7 @@ class ScriptDetailViewModelTest {
             savedStateHandle = SavedStateHandle(mapOf("scriptId" to scriptId))
         }
         return ScriptDetailViewModel(
-            savedStateHandle, repository, activeUserStore,
+            savedStateHandle, repository, userSelectionManager,
             installScriptUseCase, restoreScriptUseCase, classifyScriptUseCase, shizukuManager
         )
     }

@@ -8,13 +8,12 @@ import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
-import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
+import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
 import com.istarvin.skinscriptinstaller.service.InvalidPasswordException
 import com.istarvin.skinscriptinstaller.service.PasswordRequiredException
-import com.istarvin.skinscriptinstaller.service.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -101,20 +100,18 @@ class ScriptListViewModel @Inject constructor(
     private val repository: ScriptRepository,
     private val importScriptUseCase: ImportScriptUseCase,
     private val restoreScriptUseCase: RestoreScriptUseCase,
-    private val activeUserStore: ActiveUserStore,
-    private val shizukuManager: ShizukuManager,
+    private val userSelectionManager: UserSelectionManager,
     private val fetchHeroCatalogUseCase: FetchHeroCatalogUseCase
 ) : ViewModel() {
 
     private var didInitializeExpandedSections = false
 
-    private val _eligibleUserIds = MutableStateFlow<List<Int>>(emptyList())
-    val eligibleUserIds: StateFlow<List<Int>> = _eligibleUserIds.asStateFlow()
+    val eligibleUserIds: StateFlow<List<Int>> = userSelectionManager.eligibleUserIds
 
     private val _expandedSectionKeys = MutableStateFlow<Set<String>>(emptySet())
     val expandedSectionKeys: StateFlow<Set<String>> = _expandedSectionKeys.asStateFlow()
 
-    val activeUserId: StateFlow<Int> = activeUserStore.activeUserId
+    val activeUserId: StateFlow<Int> = userSelectionManager.activeUserId
 
     private val scripts: StateFlow<List<SkinScript>> = repository.getAllScripts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -193,7 +190,7 @@ class ScriptListViewModel @Inject constructor(
     val pendingClassificationScriptId: StateFlow<Long?> = _pendingClassificationScriptId.asStateFlow()
 
     init {
-        observeEligibleUsers()
+        userSelectionManager.observeFileService(viewModelScope)
         observeHeroSections()
         viewModelScope.launch {
             if (repository.getHeroCount() == 0) {
@@ -233,43 +230,8 @@ class ScriptListViewModel @Inject constructor(
         }
     }
 
-    private fun observeEligibleUsers() {
-        viewModelScope.launch {
-            shizukuManager.fileService.collect {
-                refreshEligibleUsers()
-            }
-        }
-    }
-
-    private fun refreshEligibleUsers() {
-        val service = shizukuManager.fileService.value
-        if (service == null) {
-            _eligibleUserIds.value = emptyList()
-            activeUserStore.setActiveUser(0)
-            return
-        }
-
-        val detected = try {
-            service.listEligibleMlUserIds().toList().distinct().sorted()
-        } catch (_: Exception) {
-            emptyList()
-        }
-
-        _eligibleUserIds.value = detected
-
-        val nextActiveUser = when {
-            detected.isEmpty() -> 0
-            activeUserId.value in detected -> activeUserId.value
-            0 in detected -> 0
-            else -> detected.first()
-        }
-        activeUserStore.setActiveUser(nextActiveUser)
-    }
-
     fun selectActiveUser(userId: Int) {
-        if (userId in _eligibleUserIds.value) {
-            activeUserStore.setActiveUser(userId)
-        }
+        userSelectionManager.selectUser(userId)
     }
 
     fun toggleSection(sectionKey: String) {
@@ -351,7 +313,7 @@ class ScriptListViewModel @Inject constructor(
             _importError.value = null
 
             if (restoreBeforeDelete) {
-                val latestInstallation = repository.getLatestInstallation(script.id, activeUserId.value)
+                val latestInstallation = repository.getLatestInstallation(script.id, userSelectionManager.activeUserId.value)
                 if (latestInstallation == null || latestInstallation.status != "installed") {
                     _importError.value = "No active installation found to restore"
                     return@launch

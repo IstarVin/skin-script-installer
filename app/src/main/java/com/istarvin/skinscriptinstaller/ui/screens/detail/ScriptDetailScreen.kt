@@ -20,24 +20,16 @@ import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Person
-import coil3.compose.AsyncImage
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -57,6 +49,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.istarvin.skinscriptinstaller.ui.components.ClassifyScriptDialog
 import com.istarvin.skinscriptinstaller.ui.components.InstallStatusChip
 import com.istarvin.skinscriptinstaller.ui.theme.AppAlpha
 import com.istarvin.skinscriptinstaller.ui.theme.AppDimens
@@ -444,264 +437,6 @@ private fun ClassificationCard(
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ClassifyScriptDialog(
-    currentHeroName: String?,
-    currentOriginalSkinName: String?,
-    currentReplacementSkinName: String?,
-    suggestedHeroName: String?,
-    allHeroes: List<com.istarvin.skinscriptinstaller.data.db.entity.Hero>,
-    skinsForSelectedHero: List<com.istarvin.skinscriptinstaller.data.db.entity.Skin>,
-    onHeroNameChanged: (String) -> Unit,
-    onConfirm: (heroName: String, originalSkinName: String, replacementSkinName: String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var heroText by remember { mutableStateOf(currentHeroName ?: suggestedHeroName ?: "") }
-    var heroInputTouched by remember { mutableStateOf(false) }
-    val wasSuggested = currentHeroName == null && suggestedHeroName != null
-    var originalSkinText by remember { mutableStateOf(currentOriginalSkinName ?: "") }
-    var replacementSkinText by remember { mutableStateOf(currentReplacementSkinName ?: "") }
-
-    var heroExpanded by remember { mutableStateOf(false) }
-    var originalSkinExpanded by remember { mutableStateOf(false) }
-    var replacementSkinExpanded by remember { mutableStateOf(false) }
-
-    LaunchedEffect(currentHeroName, suggestedHeroName) {
-        if (
-            !heroInputTouched &&
-            currentHeroName.isNullOrBlank() &&
-            heroText.isBlank() &&
-            !suggestedHeroName.isNullOrBlank()
-        ) {
-            heroText = suggestedHeroName
-        }
-    }
-
-    // Load skins when hero text changes
-    LaunchedEffect(heroText) {
-        if (heroText.isNotBlank()) {
-            onHeroNameChanged(heroText)
-        }
-    }
-
-    val filteredHeroes = remember(heroText, allHeroes) {
-        if (heroText.isBlank()) allHeroes
-        else allHeroes.filter { it.name.contains(heroText, ignoreCase = true) }
-    }
-
-    val filteredOriginalSkins = remember(originalSkinText, skinsForSelectedHero) {
-        if (originalSkinText.isBlank()) skinsForSelectedHero
-        else skinsForSelectedHero.filter { it.name.contains(originalSkinText, ignoreCase = true) }
-    }
-
-    val replacementCandidateSkins = remember(originalSkinText, skinsForSelectedHero) {
-        val selectedOriginal = originalSkinText.trim()
-        if (selectedOriginal.isBlank()) {
-            skinsForSelectedHero
-        } else {
-            skinsForSelectedHero.filterNot { it.name.equals(selectedOriginal, ignoreCase = true) }
-        }
-    }
-
-    val filteredReplacementSkins = remember(replacementSkinText, replacementCandidateSkins) {
-        if (replacementSkinText.isBlank()) replacementCandidateSkins
-        else replacementCandidateSkins.filter {
-            it.name.contains(
-                replacementSkinText,
-                ignoreCase = true
-            )
-        }
-    }
-
-    val canConfirm = heroText.isNotBlank() &&
-            originalSkinText.isNotBlank() &&
-            replacementSkinText.isNotBlank() &&
-            !originalSkinText.trim().equals(replacementSkinText.trim(), ignoreCase = true)
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "Classify Script",
-                style = MaterialTheme.typography.titleLarge
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = AppDimens.SpaceSm),
-                verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceLg)
-            ) {
-                Text(
-                    text = "Assign a hero and skin information to this script",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                // Hero field
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    ExposedDropdownMenuBox(
-                        expanded = heroExpanded && filteredHeroes.isNotEmpty(),
-                        onExpandedChange = { heroExpanded = it }
-                    ) {
-                        OutlinedTextField(
-                            value = heroText,
-                            onValueChange = {
-                                heroText = it
-                                heroInputTouched = true
-                                heroExpanded = true
-                            },
-                            label = { Text("Hero") },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-                            singleLine = true,
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = heroExpanded) }
-                        )
-                        ExposedDropdownMenu(
-                            expanded = heroExpanded && filteredHeroes.isNotEmpty(),
-                            onDismissRequest = { heroExpanded = false }
-                        ) {
-                            filteredHeroes.forEach { hero ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(AppDimens.SpaceSm)
-                                        ) {
-                                            Box(modifier = Modifier.size(AppDimens.IconHero)) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Person,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.fillMaxSize(),
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                AsyncImage(
-                                                    model = hero.heroIcon,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.fillMaxSize()
-                                                )
-                                            }
-                                            Text(hero.name)
-                                        }
-                                    },
-                                    onClick = {
-                                        heroText = hero.name
-                                        heroInputTouched = true
-                                        heroExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    if (wasSuggested) {
-                        val suggestionLabel =
-                            if (heroText.equals(suggestedHeroName, ignoreCase = true)) {
-                                "Suggested from script name"
-                            } else {
-                                "Suggested hero: $suggestedHeroName"
-                            }
-                        Text(
-                            text = suggestionLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = AppAlpha.SecondaryText)
-                        )
-                    }
-                } // end hero Column
-
-                // Replacement Skin field
-                ExposedDropdownMenuBox(
-                    expanded = replacementSkinExpanded && filteredReplacementSkins.isNotEmpty(),
-                    onExpandedChange = { replacementSkinExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = replacementSkinText,
-                        onValueChange = {
-                            replacementSkinText = it
-                            replacementSkinExpanded = true
-                        },
-                        label = { Text("Replacement Skin") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-                        singleLine = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = replacementSkinExpanded) }
-                    )
-                    ExposedDropdownMenu(
-                        expanded = replacementSkinExpanded && filteredReplacementSkins.isNotEmpty(),
-                        onDismissRequest = { replacementSkinExpanded = false }
-                    ) {
-                        filteredReplacementSkins.forEach { skin ->
-                            DropdownMenuItem(
-                                text = { Text(skin.name) },
-                                onClick = {
-                                    replacementSkinText = skin.name
-                                    replacementSkinExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                // Original Skin field
-                ExposedDropdownMenuBox(
-                    expanded = originalSkinExpanded && filteredOriginalSkins.isNotEmpty(),
-                    onExpandedChange = { originalSkinExpanded = it }
-                ) {
-                    OutlinedTextField(
-                        value = originalSkinText,
-                        onValueChange = {
-                            originalSkinText = it
-                            if (replacementSkinText.equals(it.trim(), ignoreCase = true)) {
-                                replacementSkinText = ""
-                            }
-                            originalSkinExpanded = true
-                        },
-                        label = { Text("Original Skin") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable),
-                        singleLine = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = originalSkinExpanded) }
-                    )
-                    ExposedDropdownMenu(
-                        expanded = originalSkinExpanded && filteredOriginalSkins.isNotEmpty(),
-                        onDismissRequest = { originalSkinExpanded = false }
-                    ) {
-                        filteredOriginalSkins.forEach { skin ->
-                            DropdownMenuItem(
-                                text = { Text(skin.name) },
-                                onClick = {
-                                    originalSkinText = skin.name
-                                    if (replacementSkinText.equals(skin.name, ignoreCase = true)) {
-                                        replacementSkinText = ""
-                                    }
-                                    originalSkinExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(heroText, originalSkinText, replacementSkinText) },
-                enabled = canConfirm
-            ) {
-                Text("Save")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
-            }
-        }
-    )
 }
 
 private fun flattenTree(
