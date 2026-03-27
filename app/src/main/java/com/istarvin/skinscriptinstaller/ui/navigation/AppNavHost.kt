@@ -1,8 +1,13 @@
 package com.istarvin.skinscriptinstaller.ui.navigation
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
@@ -16,6 +21,7 @@ import com.istarvin.skinscriptinstaller.ui.components.UpdateAvailableDialog
 import com.istarvin.skinscriptinstaller.ui.screens.detail.ScriptDetailScreen
 import com.istarvin.skinscriptinstaller.ui.screens.list.ScriptListScreen
 import com.istarvin.skinscriptinstaller.ui.screens.settings.SettingsScreen
+import com.istarvin.skinscriptinstaller.ui.screens.settings.UpdateEvent
 import com.istarvin.skinscriptinstaller.ui.screens.settings.UpdateCheckViewModel
 import com.istarvin.skinscriptinstaller.ui.screens.settings.UpdateState
 import com.istarvin.skinscriptinstaller.ui.screens.catalogeditor.CatalogEditorScreen
@@ -26,16 +32,54 @@ fun AppNavHost(navController: NavHostController) {
     val context = LocalContext.current
     val updateViewModel: UpdateCheckViewModel = hiltViewModel()
     val updateState by updateViewModel.updateState.collectAsState()
+    val unknownSourcesLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        updateViewModel.resumeInstallAfterPermissionCheck()
+    }
+
+    LaunchedEffect(updateViewModel, context) {
+        updateViewModel.events.collect { event ->
+            when (event) {
+                is UpdateEvent.OpenReleasePage -> {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, event.releaseUrl.toUri()))
+                }
+
+                UpdateEvent.OpenUnknownAppSourcesSettings -> {
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:${context.packageName}")
+                    )
+                    unknownSourcesLauncher.launch(intent)
+                }
+
+                is UpdateEvent.LaunchInstaller -> {
+                    val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(event.apkUri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    try {
+                        context.startActivity(installIntent)
+                    } catch (_: ActivityNotFoundException) {
+                        updateViewModel.onInstallLaunchFailed("No package installer was found")
+                    } catch (error: SecurityException) {
+                        updateViewModel.onInstallLaunchFailed(
+                            error.message ?: "Unable to launch package installer"
+                        )
+                    }
+                }
+            }
+        }
+    }
 
     if (updateState is UpdateState.UpdateAvailable) {
         val state = updateState as UpdateState.UpdateAvailable
         UpdateAvailableDialog(
             version = state.version,
             releaseNotes = state.releaseNotes,
-            onOpenReleasePage = {
-                val intent = Intent(Intent.ACTION_VIEW, state.releaseUrl.toUri())
-                context.startActivity(intent)
-            },
+            isDirectInstallSupported = !state.apkUrl.isNullOrBlank(),
+            onPrimaryAction = updateViewModel::startUpdate,
             onDismiss = { updateViewModel.dismissUpdate() }
         )
     }
@@ -73,9 +117,15 @@ fun AppNavHost(navController: NavHostController) {
         }
 
         composable(Screen.Settings.route) {
-            val isCheckingForUpdates = updateState == UpdateState.Checking
+            val isUpdateActionRunning =
+                updateState == UpdateState.Checking || updateState is UpdateState.Downloading
+            val updateActionLabel = when (updateState) {
+                is UpdateState.Downloading -> "Downloading update..."
+                else -> "Checking for updates..."
+            }
             val updateCheckMessage = when (val s = updateState) {
                 is UpdateState.Checking -> "Checking for updates..."
+                is UpdateState.Downloading -> "Downloading version ${s.version}..."
                 is UpdateState.UpToDate -> "App is up to date"
                 is UpdateState.Error -> s.message
                 else -> null
@@ -83,7 +133,8 @@ fun AppNavHost(navController: NavHostController) {
             SettingsScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onCheckForUpdates = { updateViewModel.checkForUpdate() },
-                isCheckingForUpdates = isCheckingForUpdates,
+                isUpdateActionRunning = isUpdateActionRunning,
+                updateActionLabel = updateActionLabel,
                 updateCheckMessage = updateCheckMessage,
                 onEditCatalog = {
                     navController.navigate(Screen.CatalogEditor.route)
@@ -98,4 +149,3 @@ fun AppNavHost(navController: NavHostController) {
         }
     }
 }
-

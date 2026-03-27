@@ -7,7 +7,8 @@ import javax.inject.Inject
 data class ReleaseInfo(
     val version: String,
     val releaseNotes: String,
-    val releaseUrl: String
+    val releaseUrl: String,
+    val apkUrl: String?
 )
 
 class CheckForUpdateUseCase @Inject constructor(
@@ -26,11 +27,18 @@ class CheckForUpdateUseCase @Inject constructor(
             ReleaseInfo(
                 version = latestVersion,
                 releaseNotes = release.body,
-                releaseUrl = release.htmlUrl
+                releaseUrl = release.htmlUrl,
+                apkUrl = release.assets.firstOrNull(::isApkAsset)?.browserDownloadUrl
             )
         } else {
             null
         }
+    }
+
+    private fun isApkAsset(asset: com.istarvin.skinscriptinstaller.data.network.dto.GitHubReleaseAssetDto): Boolean {
+        return asset.browserDownloadUrl.endsWith(".apk", ignoreCase = true) ||
+            asset.contentType.equals("application/vnd.android.package-archive", ignoreCase = true) ||
+            asset.name.endsWith(".apk", ignoreCase = true)
     }
 
     private fun isNewerVersion(latest: String, current: String): Boolean {

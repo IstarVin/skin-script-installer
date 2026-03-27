@@ -20,7 +20,8 @@ import com.istarvin.skinscriptinstaller.ui.theme.AppDimens
 fun UpdateAvailableDialog(
     version: String,
     releaseNotes: String,
-    onOpenReleasePage: () -> Unit,
+    isDirectInstallSupported: Boolean,
+    onPrimaryAction: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -52,8 +53,8 @@ fun UpdateAvailableDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onOpenReleasePage) {
-                Text("Open Release Page")
+            TextButton(onClick = onPrimaryAction) {
+                Text(if (isDirectInstallSupported) "Download & Install" else "Open Release Page")
             }
         },
         dismissButton = {

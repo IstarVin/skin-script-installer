@@ -54,7 +54,8 @@ private const val UpdateMessageDismissDelayMillis = 4_000L
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onCheckForUpdates: () -> Unit = {},
-    isCheckingForUpdates: Boolean = false,
+    isUpdateActionRunning: Boolean = false,
+    updateActionLabel: String = "Checking for updates...",
     updateCheckMessage: String? = null,
     onEditCatalog: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
@@ -75,9 +76,9 @@ fun SettingsScreen(
 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss") }
 
-    LaunchedEffect(updateCheckMessage, isCheckingForUpdates) {
+    LaunchedEffect(updateCheckMessage, isUpdateActionRunning) {
         visibleUpdateCheckMessage = updateCheckMessage
-        if (!isCheckingForUpdates && updateCheckMessage == UpToDateMessage) {
+        if (!isUpdateActionRunning && updateCheckMessage == UpToDateMessage) {
             delay(UpdateMessageDismissDelayMillis)
             visibleUpdateCheckMessage = null
         }
@@ -133,7 +134,8 @@ fun SettingsScreen(
         catalogRefreshMessage = catalogRefreshMessage,
         onEditCatalog = onEditCatalog,
         onCheckForUpdates = onCheckForUpdates,
-        isCheckingForUpdates = isCheckingForUpdates,
+        isUpdateActionRunning = isUpdateActionRunning,
+        updateActionLabel = updateActionLabel,
         updateCheckMessage = visibleUpdateCheckMessage
     )
 }
@@ -163,7 +165,8 @@ fun SettingsContent(
     catalogRefreshMessage: String?,
     onEditCatalog: () -> Unit,
     onCheckForUpdates: () -> Unit,
-    isCheckingForUpdates: Boolean,
+    isUpdateActionRunning: Boolean,
+    updateActionLabel: String,
     updateCheckMessage: String?
 ) {
     val setupState = remember(isShizukuAvailable, isPermissionGranted, isServiceBound) {
@@ -226,14 +229,14 @@ fun SettingsContent(
             primaryAction = SettingsActionButton(
                 label = "Check for Updates",
                 onClick = onCheckForUpdates,
-                enabled = !isCheckingForUpdates,
+                enabled = !isUpdateActionRunning,
                 style = SettingsActionStyle.Outlined
             ),
-            isInProgress = isCheckingForUpdates,
-            progressLabel = "Checking for updates...",
-            message = updateCheckMessage?.takeUnless { isCheckingForUpdates },
+            isInProgress = isUpdateActionRunning,
+            progressLabel = updateActionLabel,
+            message = updateCheckMessage?.takeUnless { isUpdateActionRunning },
             messageTone = feedbackTone(
-                message = updateCheckMessage?.takeUnless { isCheckingForUpdates },
+                message = updateCheckMessage?.takeUnless { isUpdateActionRunning },
                 negativeKeywords = listOf("failed", "error")
             ),
             testTag = SettingsTestTags.MaintenanceUpdates
