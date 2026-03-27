@@ -163,7 +163,7 @@ fun ScriptListScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (eligibleUserIds.isNotEmpty()) {
+            if (eligibleUserIds.size > 1) {
                 ActiveUserSelector(
                     eligibleUserIds = eligibleUserIds,
                     activeUserId = activeUserId,
@@ -277,6 +277,8 @@ private fun ActiveUserSelector(
     onUserSelected: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    if (eligibleUserIds.size <= 1) return
+
     var expanded by remember { mutableStateOf(false) }
 
     Row(
@@ -537,4 +539,3 @@ private fun formatDate(millis: Long): String {
     val sdf = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
     return sdf.format(Date(millis))
 }
-
