@@ -111,6 +111,9 @@ class ScriptListViewModel @Inject constructor(
     private val _expandedSectionKeys = MutableStateFlow<Set<String>>(emptySet())
     val expandedSectionKeys: StateFlow<Set<String>> = _expandedSectionKeys.asStateFlow()
 
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
     val activeUserId: StateFlow<Int> = userSelectionManager.activeUserId
 
     private val scripts: StateFlow<List<SkinScript>> = repository.getAllScripts()
@@ -155,9 +158,16 @@ class ScriptListViewModel @Inject constructor(
 
     val heroScriptSections: StateFlow<List<HeroScriptSection>> = combine(
         heroScriptGroups,
-        expandedSectionKeys
-    ) { groups, expandedKeys ->
-        groups.map { group ->
+        expandedSectionKeys,
+        searchQuery
+    ) { groups, expandedKeys, searchQuery ->
+        val normalizedQuery = searchQuery.trim()
+        groups
+            .asSequence()
+            .filter { group ->
+                normalizedQuery.isBlank() || group.title.contains(normalizedQuery, ignoreCase = true)
+            }
+            .map { group ->
             HeroScriptSection(
                 key = group.key,
                 title = group.title,
@@ -174,7 +184,8 @@ class ScriptListViewModel @Inject constructor(
                 isFlat = group.isFlat,
                 isExpanded = group.key in expandedKeys
             )
-        }
+            }
+            .toList()
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _importError = MutableStateFlow<String?>(null)
@@ -231,6 +242,10 @@ class ScriptListViewModel @Inject constructor(
 
     fun selectActiveUser(userId: Int) {
         userSelectionManager.selectUser(userId)
+    }
+
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
     }
 
     fun toggleSection(sectionKey: String) {

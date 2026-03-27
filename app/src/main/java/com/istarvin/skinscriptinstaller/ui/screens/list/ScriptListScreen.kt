@@ -23,8 +23,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.Card
@@ -39,6 +41,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -78,6 +81,8 @@ fun ScriptListScreen(
     viewModel: ScriptListViewModel = hiltViewModel()
 ) {
     val heroScriptSections by viewModel.heroScriptSections.collectAsState()
+    val scriptsWithStatus by viewModel.scriptsWithStatus.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
     val eligibleUserIds by viewModel.eligibleUserIds.collectAsState()
     val activeUserId by viewModel.activeUserId.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
@@ -88,6 +93,7 @@ fun ScriptListScreen(
 
     var scriptToDelete by remember { mutableStateOf<ScriptWithStatus?>(null) }
     var showImportChoiceDialog by remember { mutableStateOf(false) }
+    var showSearchField by remember { mutableStateOf(searchQuery.isNotBlank()) }
     var zipPasswordText by remember { mutableStateOf("") }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
@@ -129,6 +135,21 @@ fun ScriptListScreen(
             TopAppBar(
                 title = { Text("Skin Script Installer") },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            if (showSearchField) {
+                                showSearchField = false
+                                viewModel.updateSearchQuery("")
+                            } else {
+                                showSearchField = true
+                            }
+                        }
+                    ) {
+                        Icon(
+                            imageVector = if (showSearchField) Icons.Default.Close else Icons.Default.Search,
+                            contentDescription = if (showSearchField) "Close search" else "Search"
+                        )
+                    }
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
@@ -177,7 +198,20 @@ fun ScriptListScreen(
                 )
             }
 
-            if (heroScriptSections.isEmpty() && !isImporting) {
+            if (showSearchField) {
+                HeroSearchField(
+                    query = searchQuery,
+                    onQueryChange = viewModel::updateSearchQuery,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = AppDimens.ScreenHorizontal,
+                            vertical = AppDimens.SpaceSm
+                        )
+                )
+            }
+
+            if (heroScriptSections.isEmpty() && !isImporting && scriptsWithStatus.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -188,6 +222,19 @@ fun ScriptListScreen(
                         icon = Icons.Outlined.FolderOpen,
                         title = "No scripts imported",
                         subtitle = "Tap + to import a skin script folder or ZIP"
+                    )
+                }
+            } else if (heroScriptSections.isEmpty() && !isImporting) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = AppDimens.ScreenHorizontal),
+                    contentAlignment = Alignment.Center
+                ) {
+                    AppEmptyState(
+                        icon = Icons.Default.Search,
+                        title = "No heroes found",
+                        subtitle = "Try a different hero name"
                     )
                 }
             } else {
@@ -268,6 +315,22 @@ fun ScriptListScreen(
             )
         }
     }
+}
+
+@Composable
+private fun HeroSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = modifier,
+        singleLine = true,
+        label = { Text("Search heroes") },
+        placeholder = { Text("Search heroes") }
+    )
 }
 
 @Composable

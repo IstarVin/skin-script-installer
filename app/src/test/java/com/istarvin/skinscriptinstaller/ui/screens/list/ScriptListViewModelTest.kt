@@ -140,6 +140,126 @@ class ScriptListViewModelTest {
     }
 
     @Test
+    fun `heroScriptSections keeps full list for blank search query`() = runTest {
+        val heroes = listOf(
+            Hero(id = 1L, name = "Miya"),
+            Hero(id = 2L, name = "Layla")
+        )
+        val scripts = listOf(
+            SkinScript(id = 1L, name = "Miya Epic", storagePath = "/path/1", heroId = 1L),
+            SkinScript(id = 2L, name = "Layla Basic", storagePath = "/path/2", heroId = 2L),
+            SkinScript(id = 3L, name = "Mystery", storagePath = "/path/3")
+        )
+
+        every { repository.getAllHeroes() } returns flowOf(heroes)
+        every { repository.getAllScripts() } returns flowOf(scripts)
+
+        createViewModel()
+
+        val collectJob = launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.heroScriptSections.collect {}
+        }
+        advanceUntilIdle()
+
+        viewModel.updateSearchQuery("   ")
+        advanceUntilIdle()
+
+        assertEquals(listOf("Miya", "Layla", "Uncategorized"), viewModel.heroScriptSections.value.map { it.title })
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `heroScriptSections filters by hero title substring`() = runTest {
+        val heroes = listOf(
+            Hero(id = 1L, name = "Miya"),
+            Hero(id = 2L, name = "Layla")
+        )
+        val scripts = listOf(
+            SkinScript(id = 1L, name = "Miya Epic", storagePath = "/path/1", heroId = 1L),
+            SkinScript(id = 2L, name = "Layla Basic", storagePath = "/path/2", heroId = 2L),
+            SkinScript(id = 3L, name = "Mystery", storagePath = "/path/3")
+        )
+
+        every { repository.getAllHeroes() } returns flowOf(heroes)
+        every { repository.getAllScripts() } returns flowOf(scripts)
+
+        createViewModel()
+
+        val collectJob = launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.heroScriptSections.collect {}
+        }
+        advanceUntilIdle()
+
+        viewModel.updateSearchQuery("mi")
+        advanceUntilIdle()
+
+        val result = viewModel.heroScriptSections.value
+        assertEquals(listOf("Miya"), result.map { it.title })
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `heroScriptSections search is case insensitive`() = runTest {
+        val heroes = listOf(
+            Hero(id = 1L, name = "Miya"),
+            Hero(id = 2L, name = "Layla")
+        )
+        val scripts = listOf(
+            SkinScript(id = 1L, name = "Miya Epic", storagePath = "/path/1", heroId = 1L),
+            SkinScript(id = 2L, name = "Layla Basic", storagePath = "/path/2", heroId = 2L)
+        )
+
+        every { repository.getAllHeroes() } returns flowOf(heroes)
+        every { repository.getAllScripts() } returns flowOf(scripts)
+
+        createViewModel()
+
+        val collectJob = launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.heroScriptSections.collect {}
+        }
+        advanceUntilIdle()
+
+        viewModel.updateSearchQuery("LAY")
+        advanceUntilIdle()
+
+        val result = viewModel.heroScriptSections.value
+        assertEquals(listOf("Layla"), result.map { it.title })
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `heroScriptSections only includes uncategorized when title matches query`() = runTest {
+        val heroes = listOf(Hero(id = 1L, name = "Miya"))
+        val scripts = listOf(
+            SkinScript(id = 1L, name = "Miya Epic", storagePath = "/path/1", heroId = 1L),
+            SkinScript(id = 2L, name = "Mystery", storagePath = "/path/2")
+        )
+
+        every { repository.getAllHeroes() } returns flowOf(heroes)
+        every { repository.getAllScripts() } returns flowOf(scripts)
+
+        createViewModel()
+
+        val collectJob = launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.heroScriptSections.collect {}
+        }
+        advanceUntilIdle()
+
+        viewModel.updateSearchQuery("unc")
+        advanceUntilIdle()
+        assertEquals(listOf("Uncategorized"), viewModel.heroScriptSections.value.map { it.title })
+
+        viewModel.updateSearchQuery("mi")
+        advanceUntilIdle()
+        assertEquals(listOf("Miya"), viewModel.heroScriptSections.value.map { it.title })
+
+        collectJob.cancel()
+    }
+
+    @Test
     fun `toggleHeroSection updates only targeted section expansion`() = runTest {
         val heroes = listOf(
             Hero(id = 1L, name = "Miya"),
