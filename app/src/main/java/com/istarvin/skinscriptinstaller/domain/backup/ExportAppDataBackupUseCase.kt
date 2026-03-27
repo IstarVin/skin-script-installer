@@ -86,7 +86,8 @@ class ExportAppDataBackupUseCase @Inject constructor(
                 heroes = heroes.map { hero ->
                     HeroBackupRecord(
                         id = hero.id,
-                        name = hero.name
+                        name = hero.name,
+                        heroIcon = hero.heroIcon
                     )
                 },
                 skins = skins.map { skin ->

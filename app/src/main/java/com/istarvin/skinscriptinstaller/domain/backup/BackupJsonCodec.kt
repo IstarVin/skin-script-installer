@@ -17,6 +17,7 @@ object BackupJsonCodec {
                         JSONObject()
                             .put("id", hero.id)
                             .put("name", hero.name)
+                            .put("heroIcon", hero.heroIcon)
                     )
                 }
             })
@@ -79,7 +80,8 @@ object BackupJsonCodec {
         val heroes = root.optJSONArray("heroes")?.toList { item ->
             HeroBackupRecord(
                 id = item.getLong("id"),
-                name = item.getString("name")
+                name = item.getString("name"),
+                heroIcon = item.takeUnless { it.isNull("heroIcon") }?.getString("heroIcon")
             )
         } ?: emptyList()
 

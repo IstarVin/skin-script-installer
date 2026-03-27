@@ -42,7 +42,8 @@ data class InstalledFileBackupRecord(
 
 data class HeroBackupRecord(
     val id: Long,
-    val name: String
+    val name: String,
+    val heroIcon: String? = null
 )
 
 data class SkinBackupRecord(

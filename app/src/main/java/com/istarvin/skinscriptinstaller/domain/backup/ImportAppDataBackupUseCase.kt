@@ -62,7 +62,8 @@ class ImportAppDataBackupUseCase @Inject constructor(
             val heroes = manifest.heroes.map { hero ->
                 Hero(
                     id = hero.id,
-                    name = hero.name
+                    name = hero.name,
+                    heroIcon = hero.heroIcon
                 )
             }
 
