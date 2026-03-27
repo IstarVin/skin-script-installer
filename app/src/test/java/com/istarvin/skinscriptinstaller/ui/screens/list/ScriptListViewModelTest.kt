@@ -132,9 +132,44 @@ class ScriptListViewModelTest {
         assertEquals(3, result.size)
         assertEquals(listOf("Miya", "Layla", "Uncategorized"), result.map { it.title })
         assertTrue(result.all { !it.isExpanded })
+        assertTrue(result.all { !it.hasInstalledScript })
         assertEquals(listOf(1L), result[0].skinReplacementSections.single().scripts.map { it.script.id })
         assertEquals(listOf(2L), result[1].skinReplacementSections.single().scripts.map { it.script.id })
         assertEquals(listOf(3L), result[2].flatScripts.map { it.script.id })
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `heroScriptSections marks heroes with active installed script`() = runTest {
+        val heroes = listOf(
+            Hero(id = 1L, name = "Miya"),
+            Hero(id = 2L, name = "Layla")
+        )
+        val scripts = listOf(
+            SkinScript(id = 1L, name = "Miya Epic", storagePath = "/path/1", heroId = 1L),
+            SkinScript(id = 2L, name = "Layla Basic", storagePath = "/path/2", heroId = 2L)
+        )
+        val installations = listOf(
+            Installation(id = 10L, scriptId = 1L, userId = 0, status = "installed"),
+            Installation(id = 11L, scriptId = 2L, userId = 0, status = "restored")
+        )
+
+        every { repository.getAllHeroes() } returns flowOf(heroes)
+        every { repository.getAllScripts() } returns flowOf(scripts)
+        every { repository.getLatestInstallations(0) } returns flowOf(installations)
+
+        createViewModel()
+
+        val collectJob = launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.heroScriptSections.collect {}
+        }
+        advanceUntilIdle()
+
+        val result = viewModel.heroScriptSections.value
+        assertEquals(listOf("Miya", "Layla"), result.map { it.title })
+        assertTrue(result.first { it.title == "Miya" }.hasInstalledScript)
+        assertFalse(result.first { it.title == "Layla" }.hasInstalledScript)
 
         collectJob.cancel()
     }

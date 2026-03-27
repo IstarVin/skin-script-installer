@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -41,6 +42,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -466,6 +468,9 @@ private fun HeroScriptAccordionSection(
                 )
                 Spacer(modifier = Modifier.width(AppDimens.SpaceMd))
             }
+        } else null,
+        titleSuffix = if (!section.isFlat && section.hasInstalledScript) {
+            { HeroInstalledIndicator() }
         } else null
     ) {
         if (section.isFlat) {
@@ -519,6 +524,44 @@ private fun HeroSectionIcon(
         }
     }
 }
+
+@Composable
+private fun HeroInstalledIndicator(
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primary.copy(alpha = AppAlpha.ChipContainer)
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                horizontal = AppDimens.SpaceSm,
+                vertical = AppDimens.SpaceXs
+            ),
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.SpaceXs),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = CircleShape
+                    )
+            )
+            Text(
+                text = "Installed",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
 @Composable
 private fun SkinReplacementAccordionSection(
     section: SkinReplacementSection,

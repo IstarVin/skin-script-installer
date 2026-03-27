@@ -75,7 +75,8 @@ data class HeroScriptGroup(
     val heroIcon: String? = null,
     val skinReplacementGroups: List<SkinReplacementGroup> = emptyList(),
     val flatScripts: List<ScriptWithStatus> = emptyList(),
-    val isFlat: Boolean = false
+    val isFlat: Boolean = false,
+    val hasInstalledScript: Boolean = false
 ) {
     val count: Int
         get() = if (isFlat) flatScripts.size else skinReplacementGroups.sumOf { it.count }
@@ -88,6 +89,7 @@ data class HeroScriptSection(
     val skinReplacementSections: List<SkinReplacementSection> = emptyList(),
     val flatScripts: List<ScriptWithStatus> = emptyList(),
     val isFlat: Boolean = false,
+    val hasInstalledScript: Boolean = false,
     val isExpanded: Boolean
 ) {
     val count: Int
@@ -182,6 +184,7 @@ class ScriptListViewModel @Inject constructor(
                 },
                 flatScripts = group.flatScripts,
                 isFlat = group.isFlat,
+                hasInstalledScript = group.hasInstalledScript,
                 isExpanded = group.key in expandedKeys
             )
             }
@@ -373,7 +376,8 @@ class ScriptListViewModel @Inject constructor(
                         title = "Uncategorized",
                         heroIcon = null,
                         flatScripts = scriptsForHero,
-                        isFlat = true
+                        isFlat = true,
+                        hasInstalledScript = scriptsForHero.any { it.status == "installed" }
                     )
                 } else {
                     val replacementGroups = scriptsForHero
@@ -391,7 +395,8 @@ class ScriptListViewModel @Inject constructor(
                         title = heroKey,
                         heroIcon = scriptsForHero.firstOrNull()?.heroIcon,
                         skinReplacementGroups = replacementGroups,
-                        isFlat = false
+                        isFlat = false,
+                        hasInstalledScript = scriptsForHero.any { it.status == "installed" }
                     )
                 }
             }

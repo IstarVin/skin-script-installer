@@ -57,6 +57,7 @@ fun CollapsibleSection(
     contentSpacing: Dp = AppDimens.SpaceSm,
     titleStyle: androidx.compose.ui.text.TextStyle = MaterialTheme.typography.titleMedium,
     leadingIcon: @Composable (() -> Unit)? = null,
+    titleSuffix: @Composable (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     Card(
@@ -83,11 +84,17 @@ fun CollapsibleSection(
                 leadingIcon?.invoke()
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = title,
-                        style = titleStyle,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(AppDimens.SpaceSm)
+                    ) {
+                        Text(
+                            text = title,
+                            style = titleStyle,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        titleSuffix?.invoke()
+                    }
                     Spacer(modifier = Modifier.height(AppDimens.Space2))
                     Text(
                         text = subtitle,
