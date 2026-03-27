@@ -82,9 +82,18 @@ fun ClassifyScriptDialog(
         else allHeroes.filter { it.name.contains(heroText, ignoreCase = true) }
     }
 
-    val filteredOriginalSkins = remember(originalSkinText, skinsForSelectedHero) {
-        if (originalSkinText.isBlank()) skinsForSelectedHero
-        else skinsForSelectedHero.filter { it.name.contains(originalSkinText, ignoreCase = true) }
+    val originalCandidateSkins = remember(replacementSkinText, skinsForSelectedHero) {
+        val selectedReplacement = replacementSkinText.trim()
+        if (selectedReplacement.isBlank()) {
+            skinsForSelectedHero
+        } else {
+            skinsForSelectedHero.filterNot { it.name.equals(selectedReplacement, ignoreCase = true) }
+        }
+    }
+
+    val filteredOriginalSkins = remember(originalSkinText, originalCandidateSkins) {
+        if (originalSkinText.isBlank()) originalCandidateSkins
+        else originalCandidateSkins.filter { it.name.contains(originalSkinText, ignoreCase = true) }
     }
 
     val replacementCandidateSkins = remember(originalSkinText, skinsForSelectedHero) {
@@ -212,6 +221,9 @@ fun ClassifyScriptDialog(
                         value = replacementSkinText,
                         onValueChange = {
                             replacementSkinText = it
+                            if (originalSkinText.equals(it.trim(), ignoreCase = true)) {
+                                originalSkinText = ""
+                            }
                             replacementSkinExpanded = true
                         },
                         label = { Text("Replacement Skin") },
@@ -230,6 +242,9 @@ fun ClassifyScriptDialog(
                                 text = { Text(skin.name) },
                                 onClick = {
                                     replacementSkinText = skin.name
+                                    if (originalSkinText.equals(skin.name, ignoreCase = true)) {
+                                        originalSkinText = ""
+                                    }
                                     replacementSkinExpanded = false
                                 }
                             )

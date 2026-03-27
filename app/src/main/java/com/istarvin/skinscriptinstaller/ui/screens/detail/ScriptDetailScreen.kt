@@ -507,47 +507,40 @@ private fun ClassificationCard(
         elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
     ) {
         Column(modifier = Modifier.padding(AppDimens.SpaceLg)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Classification",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                IconButton(onClick = onEditClick, modifier = Modifier.size(AppDimens.IconHero)) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "Edit classification",
-                        modifier = Modifier.size(AppDimens.IconSmall),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
             if (heroName != null) {
-                Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
-                Text(
-                    text = heroName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                if (originalSkinName != null && replacementSkinName != null) {
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
-                    Text(
-                        text = "$originalSkinName → $replacementSkinName",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
-                TextButton(onClick = onClearClick) {
-                    Text("Clear", style = MaterialTheme.typography.labelSmall)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = heroName,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (originalSkinName != null && replacementSkinName != null) {
+                            Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
+                            Text(
+                                text = "$originalSkinName → $replacementSkinName",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onEditClick,
+                        modifier = Modifier.size(AppDimens.IconHero)
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit classification",
+                            modifier = Modifier.size(AppDimens.IconSmall),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             } else {
-                Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
                 Text(
                     text = "Uncategorized",
                     style = MaterialTheme.typography.bodyMedium,
