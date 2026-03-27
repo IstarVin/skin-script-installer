@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.istarvin.skinscriptinstaller.ui.components.RestoreAllScriptsAction
 import com.istarvin.skinscriptinstaller.ui.theme.AppDimens
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -41,6 +42,7 @@ object SettingsTestTags {
     const val ShizukuPrimaryAction = "settings-shizuku-primary-action"
     const val MaintenanceBackup = "settings-maintenance-backup"
     const val MaintenanceCatalog = "settings-maintenance-catalog"
+    const val MaintenanceRestoreAll = "settings-maintenance-restore-all"
     const val MaintenanceUpdates = "settings-maintenance-updates"
 }
 
@@ -63,6 +65,11 @@ fun SettingsScreen(
     val backupMessage by viewModel.backupMessage.collectAsState()
     val isRefreshingCatalog by viewModel.isRefreshingCatalog.collectAsState()
     val catalogRefreshMessage by viewModel.catalogRefreshMessage.collectAsState()
+    val activeUserId by viewModel.activeUserId.collectAsState()
+    val restoreAllCount by viewModel.restoreAllCount.collectAsState()
+    val canRestoreAll by viewModel.canRestoreAll.collectAsState()
+    val isRestoringAll by viewModel.isRestoringAll.collectAsState()
+    val restoreAllMessage by viewModel.restoreAllMessage.collectAsState()
     var visibleUpdateCheckMessage by remember { mutableStateOf<String?>(null) }
 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss") }
@@ -114,6 +121,12 @@ fun SettingsScreen(
         },
         isBackupOperationRunning = isBackupOperationRunning,
         backupMessage = backupMessage,
+        activeUserId = activeUserId,
+        restoreAllCount = restoreAllCount,
+        canRestoreAll = canRestoreAll,
+        isRestoringAll = isRestoringAll,
+        restoreAllMessage = restoreAllMessage,
+        onRestoreAll = viewModel::restoreAll,
         onRefreshHeroCatalog = viewModel::refreshHeroCatalog,
         isRefreshingCatalog = isRefreshingCatalog,
         catalogRefreshMessage = catalogRefreshMessage,
@@ -137,6 +150,12 @@ fun SettingsContent(
     onRestoreBackup: () -> Unit,
     isBackupOperationRunning: Boolean,
     backupMessage: String?,
+    activeUserId: Int,
+    restoreAllCount: Int,
+    canRestoreAll: Boolean,
+    isRestoringAll: Boolean,
+    restoreAllMessage: String?,
+    onRestoreAll: () -> Unit,
     onRefreshHeroCatalog: () -> Unit,
     isRefreshingCatalog: Boolean,
     catalogRefreshMessage: String?,
@@ -289,6 +308,43 @@ fun SettingsContent(
                                 color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)
                             )
                         }
+                    }
+                }
+            }
+
+            item {
+                SettingsSectionCard(
+                    modifier = Modifier.testTag(SettingsTestTags.MaintenanceRestoreAll)
+                ) {
+                    SettingsCardHeader(
+                        title = "Script Restore",
+                        subtitle = "Restore every installed script for the currently selected Mobile Legends user.",
+                        badgeLabel = "User $activeUserId",
+                        badgeTone = if (canRestoreAll) SettingsTone.Caution else SettingsTone.Neutral
+                    )
+
+                    RestoreAllScriptsAction(
+                        activeUserId = activeUserId,
+                        restorableCount = restoreAllCount,
+                        enabled = canRestoreAll,
+                        isRestoring = isRestoringAll,
+                        onConfirmRestoreAll = onRestoreAll
+                    )
+
+                    restoreAllMessage?.takeUnless { isRestoringAll }?.let { message ->
+                        Text(
+                            text = message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = when (feedbackTone(
+                                message = message,
+                                negativeKeywords = listOf("failed", "error")
+                            )) {
+                                SettingsTone.Positive -> MaterialTheme.colorScheme.primary
+                                SettingsTone.Caution -> MaterialTheme.colorScheme.secondary
+                                SettingsTone.Critical -> MaterialTheme.colorScheme.error
+                                SettingsTone.Neutral -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
                     }
                 }
             }

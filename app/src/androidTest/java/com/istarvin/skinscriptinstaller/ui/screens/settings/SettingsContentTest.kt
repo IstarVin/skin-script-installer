@@ -122,6 +122,10 @@ class SettingsContentTest {
                 hasAnyAncestor(hasTestTag(SettingsTestTags.MaintenanceBackup))
         ).assertExists()
         composeRule.onNode(
+            hasText("Restore All") and
+                hasAnyAncestor(hasTestTag(SettingsTestTags.MaintenanceRestoreAll))
+        ).assertExists()
+        composeRule.onNode(
             hasText("Fetching hero catalog...") and
                 hasAnyAncestor(hasTestTag(SettingsTestTags.MaintenanceCatalog))
         ).assertExists()
@@ -137,6 +141,12 @@ class SettingsContentTest {
         isServiceBound: Boolean = true,
         onRefreshStatus: () -> Unit = {},
         backupMessage: String? = null,
+        activeUserId: Int = 0,
+        restoreAllCount: Int = 0,
+        canRestoreAll: Boolean = false,
+        isRestoringAll: Boolean = false,
+        restoreAllMessage: String? = null,
+        onRestoreAll: () -> Unit = {},
         isRefreshingCatalog: Boolean = false,
         updateCheckMessage: String? = null
     ) {
@@ -154,6 +164,12 @@ class SettingsContentTest {
                     onRestoreBackup = {},
                     isBackupOperationRunning = false,
                     backupMessage = backupMessage,
+                    activeUserId = activeUserId,
+                    restoreAllCount = restoreAllCount,
+                    canRestoreAll = canRestoreAll,
+                    isRestoringAll = isRestoringAll,
+                    restoreAllMessage = restoreAllMessage,
+                    onRestoreAll = onRestoreAll,
                     onRefreshHeroCatalog = {},
                     isRefreshingCatalog = isRefreshingCatalog,
                     catalogRefreshMessage = null,

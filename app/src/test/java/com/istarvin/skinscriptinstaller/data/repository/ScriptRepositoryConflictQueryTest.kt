@@ -101,6 +101,40 @@ class ScriptRepositoryConflictQueryTest {
         assertEquals(listOf(secondConflictId, firstConflictId), conflicts.map { it.scriptId })
     }
 
+    @Test
+    fun `getLatestInstalledScriptsByUserId returns only latest installed rows for requested user`() = runTest {
+        val miyaId = repository.insertHero(Hero(name = "Miya"))
+        val laylaId = repository.insertHero(Hero(name = "Layla"))
+
+        val miyaActiveId = insertScript(name = "Miya Epic", heroId = miyaId)
+        val miyaRestoredId = insertScript(name = "Miya Legacy", heroId = miyaId)
+        val laylaOtherUserId = insertScript(name = "Layla Other User", heroId = laylaId)
+        val laylaActiveId = insertScript(name = "Layla Basic", heroId = laylaId)
+
+        insertInstallation(scriptId = miyaActiveId, userId = 0, status = "installed", installedAt = 100)
+        insertInstallation(scriptId = miyaRestoredId, userId = 0, status = "installed", installedAt = 200)
+        insertInstallation(
+            scriptId = miyaRestoredId,
+            userId = 0,
+            status = "restored",
+            installedAt = 250,
+            restoredAt = 251
+        )
+        insertInstallation(scriptId = laylaOtherUserId, userId = 10, status = "installed", installedAt = 300)
+        insertInstallation(scriptId = laylaActiveId, userId = 0, status = "installed", installedAt = 400)
+
+        val installedScripts = repository.getLatestInstalledScriptsByUserId(0)
+
+        assertEquals(
+            listOf("Layla Basic", "Miya Epic"),
+            installedScripts.map { it.scriptName }
+        )
+        assertEquals(
+            listOf(laylaActiveId, miyaActiveId),
+            installedScripts.map { it.scriptId }
+        )
+    }
+
     private suspend fun insertScript(name: String, heroId: Long): Long {
         return repository.insertScript(
             SkinScript(

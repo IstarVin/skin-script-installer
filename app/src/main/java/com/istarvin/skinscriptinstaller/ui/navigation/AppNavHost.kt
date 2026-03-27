@@ -18,6 +18,7 @@ import com.istarvin.skinscriptinstaller.ui.screens.list.ScriptListScreen
 import com.istarvin.skinscriptinstaller.ui.screens.settings.SettingsScreen
 import com.istarvin.skinscriptinstaller.ui.screens.settings.UpdateCheckViewModel
 import com.istarvin.skinscriptinstaller.ui.screens.settings.UpdateState
+import androidx.core.net.toUri
 
 @Composable
 fun AppNavHost(navController: NavHostController) {
@@ -31,7 +32,7 @@ fun AppNavHost(navController: NavHostController) {
             version = state.version,
             releaseNotes = state.releaseNotes,
             onOpenReleasePage = {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(state.releaseUrl))
+                val intent = Intent(Intent.ACTION_VIEW, state.releaseUrl.toUri())
                 context.startActivity(intent)
             },
             onDismiss = { updateViewModel.dismissUpdate() }

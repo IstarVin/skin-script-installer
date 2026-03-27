@@ -10,6 +10,7 @@ import com.istarvin.skinscriptinstaller.data.db.entity.InstalledFile
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
+import com.istarvin.skinscriptinstaller.data.db.query.LatestInstalledScript
 import io.mockk.*
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -186,6 +187,23 @@ class ScriptRepositoryTest {
         val result = repository.getLatestInstallations(5)
         assertNotNull(result)
         verify { installationDao.getLatestInstallationsByUserId(5) }
+    }
+
+    @Test
+    fun `getLatestInstalledScriptsByUserId delegates to dao`() = runTest {
+        val installedScripts = listOf(
+            LatestInstalledScript(
+                installationId = 10L,
+                scriptId = 1L,
+                scriptName = "Miya Epic"
+            )
+        )
+        coEvery { installationDao.getLatestInstalledScriptsByUserId(0) } returns installedScripts
+
+        val result = repository.getLatestInstalledScriptsByUserId(0)
+
+        assertEquals(installedScripts, result)
+        coVerify { installationDao.getLatestInstalledScriptsByUserId(0) }
     }
 
     // --- InstalledFile delegation ---

@@ -12,6 +12,7 @@ import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
+import com.istarvin.skinscriptinstaller.data.db.query.LatestInstalledScript
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -71,6 +72,9 @@ class ScriptRepository @Inject constructor(
 
     fun getLatestInstallations(userId: Int): Flow<List<Installation>> =
         installationDao.getLatestInstallationsByUserId(userId)
+
+    suspend fun getLatestInstalledScriptsByUserId(userId: Int): List<LatestInstalledScript> =
+        installationDao.getLatestInstalledScriptsByUserId(userId)
 
     // --- InstalledFile ---
 
