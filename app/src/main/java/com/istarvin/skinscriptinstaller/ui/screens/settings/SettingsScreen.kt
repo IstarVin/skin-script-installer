@@ -3,47 +3,42 @@ package com.istarvin.skinscriptinstaller.ui.screens.settings
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.testTag
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.istarvin.skinscriptinstaller.ui.theme.AppDimens
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+
+object SettingsTestTags {
+    const val ShizukuBlockingNotice = "settings-shizuku-blocking-notice"
+    const val ShizukuPrimaryAction = "settings-shizuku-primary-action"
+    const val MaintenanceBackup = "settings-maintenance-backup"
+    const val MaintenanceCatalog = "settings-maintenance-catalog"
+    const val MaintenanceUpdates = "settings-maintenance-updates"
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,326 +75,367 @@ fun SettingsScreen(
         }
     }
 
+    SettingsContent(
+        onNavigateBack = onNavigateBack,
+        isShizukuAvailable = isShizukuAvailable,
+        isPermissionGranted = isPermissionGranted,
+        isServiceBound = isServiceBound,
+        onRequestPermission = viewModel::requestPermission,
+        onBindService = viewModel::bindService,
+        onRefreshStatus = viewModel::refreshStatus,
+        onExportBackup = {
+            val fileName = "skinscript_backup_${LocalDateTime.now().format(dateFormatter)}.zip"
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "application/zip"
+                putExtra(Intent.EXTRA_TITLE, fileName)
+            }
+            exportLauncher.launch(intent)
+        },
+        onRestoreBackup = {
+            importLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
+        },
+        isBackupOperationRunning = isBackupOperationRunning,
+        backupMessage = backupMessage,
+        onRefreshHeroCatalog = viewModel::refreshHeroCatalog,
+        isRefreshingCatalog = isRefreshingCatalog,
+        catalogRefreshMessage = catalogRefreshMessage,
+        onCheckForUpdates = onCheckForUpdates,
+        isCheckingForUpdates = isCheckingForUpdates,
+        updateCheckMessage = updateCheckMessage
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsContent(
+    onNavigateBack: () -> Unit,
+    isShizukuAvailable: Boolean,
+    isPermissionGranted: Boolean,
+    isServiceBound: Boolean,
+    onRequestPermission: () -> Unit,
+    onBindService: () -> Unit,
+    onRefreshStatus: () -> Unit,
+    onExportBackup: () -> Unit,
+    onRestoreBackup: () -> Unit,
+    isBackupOperationRunning: Boolean,
+    backupMessage: String?,
+    onRefreshHeroCatalog: () -> Unit,
+    isRefreshingCatalog: Boolean,
+    catalogRefreshMessage: String?,
+    onCheckForUpdates: () -> Unit,
+    isCheckingForUpdates: Boolean,
+    updateCheckMessage: String?
+) {
+    val setupState = remember(isShizukuAvailable, isPermissionGranted, isServiceBound) {
+        ShizukuSetupState.from(
+            isShizukuAvailable = isShizukuAvailable,
+            isPermissionGranted = isPermissionGranted,
+            isServiceBound = isServiceBound
+        )
+    }
+    val maintenanceBlocks = listOf(
+        MaintenanceBlockState(
+            title = "Backup & Restore",
+            description = "Backup includes database records, imported scripts, and overwrite backups.",
+            primaryAction = SettingsActionButton(
+                label = "Export Backup",
+                onClick = onExportBackup,
+                enabled = !isBackupOperationRunning
+            ),
+            secondaryAction = SettingsActionButton(
+                label = "Restore Backup",
+                onClick = onRestoreBackup,
+                enabled = !isBackupOperationRunning,
+                style = SettingsActionStyle.Outlined
+            ),
+            isInProgress = isBackupOperationRunning,
+            progressLabel = "Processing backup operation...",
+            message = backupMessage,
+            messageTone = feedbackTone(
+                message = backupMessage,
+                negativeKeywords = listOf("failed", "incompatible")
+            ),
+            testTag = SettingsTestTags.MaintenanceBackup
+        ),
+        MaintenanceBlockState(
+            title = "Hero Catalog",
+            description = "Fetch the latest hero list from the MLBB stats API.",
+            primaryAction = SettingsActionButton(
+                label = "Refresh Hero Catalog",
+                onClick = onRefreshHeroCatalog,
+                enabled = !isRefreshingCatalog,
+                style = SettingsActionStyle.Outlined
+            ),
+            isInProgress = isRefreshingCatalog,
+            progressLabel = "Fetching hero catalog...",
+            message = catalogRefreshMessage,
+            messageTone = feedbackTone(
+                message = catalogRefreshMessage,
+                negativeKeywords = listOf("failed", "error")
+            ),
+            testTag = SettingsTestTags.MaintenanceCatalog
+        ),
+        MaintenanceBlockState(
+            title = "App Updates",
+            description = "Check for a newer version on GitHub.",
+            primaryAction = SettingsActionButton(
+                label = "Check for Updates",
+                onClick = onCheckForUpdates,
+                enabled = !isCheckingForUpdates,
+                style = SettingsActionStyle.Outlined
+            ),
+            isInProgress = isCheckingForUpdates,
+            progressLabel = "Checking for updates...",
+            message = updateCheckMessage?.takeUnless { isCheckingForUpdates },
+            messageTone = feedbackTone(
+                message = updateCheckMessage?.takeUnless { isCheckingForUpdates },
+                negativeKeywords = listOf("failed", "error")
+            ),
+            testTag = SettingsTestTags.MaintenanceUpdates
+        )
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
                     }
                 }
             )
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = AppDimens.ScreenHorizontal)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceLg)
+                .padding(padding),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceLg),
+            contentPadding = PaddingValues(
+                start = AppDimens.ScreenHorizontal,
+                top = AppDimens.SpaceLg,
+                end = AppDimens.ScreenHorizontal,
+                bottom = AppDimens.ScreenVertical
+            )
         ) {
-            // Shizuku Status Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationMedium)
-            ) {
-                Column(modifier = Modifier.padding(AppDimens.SpaceLg)) {
-                    Text(
-                        text = "Shizuku",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
-
-                    StatusRow(
-                        label = "Shizuku Service",
-                        status = if (isShizukuAvailable) "Running" else "Not Running",
-                        isPositive = isShizukuAvailable
-                    )
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
-
-                    StatusRow(
-                        label = "Permission",
-                        status = if (isPermissionGranted) "Granted" else "Not Granted",
-                        isPositive = isPermissionGranted
-                    )
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
-
-                    StatusRow(
-                        label = "File Service",
-                        status = if (isServiceBound) "Connected" else "Disconnected",
-                        isPositive = isServiceBound
-                    )
-                }
+            item {
+                SettingsSectionHeader(
+                    title = "Shizuku setup",
+                    subtitle = "Finish the connection flow here before installing or restoring scripts."
+                )
             }
 
-            // Action buttons
-            AnimatedVisibility(
-                visible = !isShizukuAvailable,
-                enter = expandVertically(),
-                exit = shrinkVertically()
-            ) {
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(AppDimens.SpaceLg)) {
-                        Text(
-                            text = "Shizuku is not running",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
+            item {
+                ShizukuSetupCard(
+                    setupState = setupState,
+                    isShizukuAvailable = isShizukuAvailable,
+                    isPermissionGranted = isPermissionGranted,
+                    isServiceBound = isServiceBound,
+                    onRequestPermission = onRequestPermission,
+                    onBindService = onBindService,
+                    onRefreshStatus = onRefreshStatus
+                )
+            }
+
+            item {
+                SettingsSectionHeader(
+                    title = "Maintenance",
+                    subtitle = "Manage backups, refresh app data, and check for new releases."
+                )
+            }
+
+            item {
+                SettingsSectionCard {
+                    maintenanceBlocks.forEachIndexed { index, block ->
+                        SettingsActionBlock(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag(block.testTag),
+                            title = block.title,
+                            description = block.description,
+                            primaryAction = block.primaryAction,
+                            secondaryAction = block.secondaryAction,
+                            isInProgress = block.isInProgress,
+                            progressLabel = block.progressLabel,
+                            message = block.message,
+                            messageTone = block.messageTone
                         )
-                        Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
-                        Text(
-                            text = "Please install and start Shizuku from the Play Store or via ADB.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
-                }
-            }
 
-            AnimatedVisibility(
-                visible = isShizukuAvailable && !isPermissionGranted,
-                enter = expandVertically(),
-                exit = shrinkVertically()
-            ) {
-                Button(
-                    onClick = { viewModel.requestPermission() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Grant Shizuku Permission")
-                }
-            }
-
-            AnimatedVisibility(
-                visible = isPermissionGranted && !isServiceBound,
-                enter = expandVertically(),
-                exit = shrinkVertically()
-            ) {
-                Button(
-                    onClick = { viewModel.bindService() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Connect File Service")
-                }
-            }
-
-            OutlinedButton(
-                onClick = { viewModel.refreshStatus() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Refresh Status")
-            }
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationMedium)
-            ) {
-                Column(modifier = Modifier.padding(AppDimens.SpaceLg)) {
-                    Text(
-                        text = "Backup & Restore",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
-                    Text(
-                        text = "Backup includes database records, imported scripts, and overwrite backups.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
-
-                    Button(
-                        onClick = {
-                            val fileName = "skinscript_backup_${LocalDateTime.now().format(dateFormatter)}.zip"
-                            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                                addCategory(Intent.CATEGORY_OPENABLE)
-                                type = "application/zip"
-                                putExtra(Intent.EXTRA_TITLE, fileName)
-                            }
-                            exportLauncher.launch(intent)
-                        },
-                        enabled = !isBackupOperationRunning,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Export Backup")
-                    }
-
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
-
-                    OutlinedButton(
-                        onClick = {
-                            importLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
-                        },
-                        enabled = !isBackupOperationRunning,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Restore Backup")
-                    }
-
-                    AnimatedVisibility(visible = isBackupOperationRunning) {
-                        Column(modifier = Modifier.padding(top = AppDimens.SpaceMd)) {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                            Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
-                            Text(
-                                text = "Processing backup operation...",
-                                style = MaterialTheme.typography.bodySmall
+                        if (index < maintenanceBlocks.lastIndex) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = AppDimens.SpaceXs),
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.16f)
                             )
                         }
                     }
-
-                    AnimatedVisibility(visible = backupMessage != null) {
-                        Text(
-                            text = backupMessage.orEmpty(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (backupMessage?.contains("failed", ignoreCase = true) == true ||
-                                backupMessage?.contains("incompatible", ignoreCase = true) == true
-                            ) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            },
-                            modifier = Modifier.padding(top = AppDimens.SpaceMd)
-                        )
-                    }
                 }
             }
-
-            // Hero Catalog Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationMedium)
-            ) {
-                Column(modifier = Modifier.padding(AppDimens.SpaceLg)) {
-                    Text(
-                        text = "Hero Catalog",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
-                    Text(
-                        text = "Fetch the latest hero list from the MLBB stats API.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
-                    OutlinedButton(
-                        onClick = { viewModel.refreshHeroCatalog() },
-                        enabled = !isRefreshingCatalog,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Refresh Hero Catalog")
-                    }
-                    AnimatedVisibility(visible = isRefreshingCatalog) {
-                        Column(modifier = Modifier.padding(top = AppDimens.SpaceMd)) {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                            Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
-                            Text(
-                                text = "Fetching hero catalog...",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                    AnimatedVisibility(visible = catalogRefreshMessage != null) {
-                        Text(
-                            text = catalogRefreshMessage.orEmpty(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (catalogRefreshMessage?.contains("failed", ignoreCase = true) == true ||
-                                catalogRefreshMessage?.contains("error", ignoreCase = true) == true
-                            ) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            },
-                            modifier = Modifier.padding(top = AppDimens.SpaceMd)
-                        )
-                    }
-                }
-            }
-
-            // App Updates Card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationMedium)
-            ) {
-                Column(modifier = Modifier.padding(AppDimens.SpaceLg)) {
-                    Text(
-                        text = "App Updates",
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
-                    Text(
-                        text = "Check for a newer version on GitHub.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
-                    OutlinedButton(
-                        onClick = onCheckForUpdates,
-                        enabled = !isCheckingForUpdates,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Check for Updates")
-                    }
-                    AnimatedVisibility(visible = isCheckingForUpdates) {
-                        Column(modifier = Modifier.padding(top = AppDimens.SpaceMd)) {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                        }
-                    }
-                    AnimatedVisibility(visible = updateCheckMessage != null && !isCheckingForUpdates) {
-                        Text(
-                            text = updateCheckMessage.orEmpty(),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = if (updateCheckMessage?.contains("failed", ignoreCase = true) == true ||
-                                updateCheckMessage?.contains("error", ignoreCase = true) == true
-                            ) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            },
-                            modifier = Modifier.padding(top = AppDimens.SpaceMd)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(AppDimens.ScreenVertical))
         }
     }
 }
 
 @Composable
-private fun StatusRow(label: String, status: String, isPositive: Boolean) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = AppDimens.SpaceXs),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium
+private fun ShizukuSetupCard(
+    setupState: ShizukuSetupState,
+    isShizukuAvailable: Boolean,
+    isPermissionGranted: Boolean,
+    isServiceBound: Boolean,
+    onRequestPermission: () -> Unit,
+    onBindService: () -> Unit,
+    onRefreshStatus: () -> Unit
+) {
+    SettingsSectionCard {
+        SettingsCardHeader(
+            title = setupState.title,
+            subtitle = setupState.subtitle,
+            badgeLabel = setupState.badgeLabel,
+            badgeTone = setupState.badgeTone
         )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = if (isPositive) Icons.Rounded.CheckCircle else Icons.Rounded.Error,
-                contentDescription = null,
-                tint = if (isPositive)
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(AppDimens.IconTiny)
+
+        SettingsStatusItem(
+            label = "Shizuku Service",
+            value = if (isShizukuAvailable) "Running" else "Not running",
+            tone = if (isShizukuAvailable) SettingsTone.Positive else SettingsTone.Critical
+        )
+        SettingsStatusItem(
+            label = "Permission",
+            value = if (isPermissionGranted) "Granted" else "Not granted",
+            tone = if (isPermissionGranted) SettingsTone.Positive else SettingsTone.Caution
+        )
+        SettingsStatusItem(
+            label = "File Service",
+            value = if (isServiceBound) "Connected" else "Disconnected",
+            tone = if (isServiceBound) SettingsTone.Positive else SettingsTone.Caution
+        )
+
+        if (setupState.noticeTitle != null && setupState.noticeMessage != null) {
+            SettingsInlineNotice(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(SettingsTestTags.ShizukuBlockingNotice),
+                title = setupState.noticeTitle,
+                message = setupState.noticeMessage,
+                tone = SettingsTone.Critical
             )
-            Text(
-                text = " $status",
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isPositive)
-                    MaterialTheme.colorScheme.primary
-                else
-                    MaterialTheme.colorScheme.error
+        }
+
+        when (setupState.primaryAction) {
+            SetupPrimaryAction.RequestPermission -> {
+                Button(
+                    onClick = onRequestPermission,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(SettingsTestTags.ShizukuPrimaryAction)
+                ) {
+                    Text("Grant Shizuku Permission")
+                }
+            }
+
+            SetupPrimaryAction.ConnectService -> {
+                Button(
+                    onClick = onBindService,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(SettingsTestTags.ShizukuPrimaryAction)
+                ) {
+                    Text("Connect File Service")
+                }
+            }
+
+            null -> Unit
+        }
+
+        OutlinedButton(
+            onClick = onRefreshStatus,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Refresh Status")
+        }
+    }
+}
+
+private data class MaintenanceBlockState(
+    val title: String,
+    val description: String,
+    val primaryAction: SettingsActionButton,
+    val secondaryAction: SettingsActionButton? = null,
+    val isInProgress: Boolean,
+    val progressLabel: String,
+    val message: String?,
+    val messageTone: SettingsTone,
+    val testTag: String
+)
+
+private enum class SetupPrimaryAction {
+    RequestPermission,
+    ConnectService
+}
+
+private data class ShizukuSetupState(
+    val title: String,
+    val subtitle: String,
+    val badgeLabel: String,
+    val badgeTone: SettingsTone,
+    val primaryAction: SetupPrimaryAction?,
+    val noticeTitle: String? = null,
+    val noticeMessage: String? = null
+) {
+    companion object {
+        fun from(
+            isShizukuAvailable: Boolean,
+            isPermissionGranted: Boolean,
+            isServiceBound: Boolean
+        ): ShizukuSetupState = when {
+            !isShizukuAvailable -> ShizukuSetupState(
+                title = "Start Shizuku first",
+                subtitle = "The service needs to be running before the app can finish setup.",
+                badgeLabel = "Blocked",
+                badgeTone = SettingsTone.Critical,
+                primaryAction = null,
+                noticeTitle = "Shizuku is not running",
+                noticeMessage = "Please install and start Shizuku from the Play Store or via ADB."
+            )
+
+            !isPermissionGranted -> ShizukuSetupState(
+                title = "Finish permission setup",
+                subtitle = "Grant access so the app can request the Shizuku file bridge.",
+                badgeLabel = "Action needed",
+                badgeTone = SettingsTone.Caution,
+                primaryAction = SetupPrimaryAction.RequestPermission
+            )
+
+            !isServiceBound -> ShizukuSetupState(
+                title = "Connect the file service",
+                subtitle = "Permission is ready. Connect the file bridge to complete setup.",
+                badgeLabel = "Action needed",
+                badgeTone = SettingsTone.Caution,
+                primaryAction = SetupPrimaryAction.ConnectService
+            )
+
+            else -> ShizukuSetupState(
+                title = "Shizuku ready",
+                subtitle = "Everything is connected and ready for installs, restores, and backups.",
+                badgeLabel = "Ready",
+                badgeTone = SettingsTone.Positive,
+                primaryAction = null
             )
         }
     }
 }
 
+private fun feedbackTone(message: String?, negativeKeywords: List<String>): SettingsTone {
+    if (message.isNullOrBlank()) return SettingsTone.Neutral
+    return if (negativeKeywords.any { keyword ->
+            message.contains(keyword, ignoreCase = true)
+        }
+    ) {
+        SettingsTone.Critical
+    } else {
+        SettingsTone.Positive
+    }
+}
