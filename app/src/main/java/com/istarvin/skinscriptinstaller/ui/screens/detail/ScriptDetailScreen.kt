@@ -1,5 +1,9 @@
 package com.istarvin.skinscriptinstaller.ui.screens.detail
 
+import android.app.Activity
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,10 +24,14 @@ import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,7 +58,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.istarvin.skinscriptinstaller.ui.components.ClassifyScriptDialog
+import com.istarvin.skinscriptinstaller.ui.components.ImportChoiceBottomSheet
 import com.istarvin.skinscriptinstaller.ui.components.InstallStatusChip
+import com.istarvin.skinscriptinstaller.ui.components.ZipPasswordDialog
 import com.istarvin.skinscriptinstaller.ui.theme.AppAlpha
 import com.istarvin.skinscriptinstaller.ui.theme.AppDimens
 import java.text.SimpleDateFormat
@@ -74,6 +84,8 @@ fun ScriptDetailScreen(
     val installProgress by viewModel.installProgress.collectAsState()
     val restoreProgress by viewModel.restoreProgress.collectAsState()
     val isShizukuReady by viewModel.isShizukuReady.collectAsState()
+    val isImporting by viewModel.isImporting.collectAsState()
+    val zipPasswordPrompt by viewModel.zipPasswordPrompt.collectAsState()
     val error by viewModel.error.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -87,6 +99,29 @@ fun ScriptDetailScreen(
 
     var showClassifyDialog by rememberSaveable { mutableStateOf(false) }
     var pendingAutoClassify by rememberSaveable(autoClassify) { mutableStateOf(autoClassify) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
+    var showImportChoiceSheet by remember { mutableStateOf(false) }
+    var zipPasswordText by remember { mutableStateOf("") }
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { uri ->
+                viewModel.updateScript(uri)
+            }
+        }
+    }
+
+    val zipPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { uri ->
+                viewModel.updateZip(uri)
+            }
+        }
+    }
 
     LaunchedEffect(pendingAutoClassify) {
         if (pendingAutoClassify) {
@@ -109,6 +144,39 @@ fun ScriptDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    Box {
+                        IconButton(
+                            onClick = { showOverflowMenu = true },
+                            enabled = !isOperating && !isImporting
+                        ) {
+                            if (isImporting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(AppDimens.IconSmall),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Default.MoreVert,
+                                    contentDescription = "More actions"
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = showOverflowMenu,
+                            onDismissRequest = { showOverflowMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Update Script") },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    showImportChoiceSheet = true
+                                },
+                                enabled = !isOperating && !isImporting
+                            )
+                        }
                     }
                 }
             )
@@ -364,6 +432,48 @@ fun ScriptDetailScreen(
                 onDismiss = { showClassifyDialog = false }
             )
         }
+
+        if (showImportChoiceSheet) {
+            ImportChoiceBottomSheet(
+                onDismiss = { showImportChoiceSheet = false },
+                onImportFolder = {
+                    val folderIntent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                    folderPickerLauncher.launch(folderIntent)
+                },
+                onImportZip = {
+                    val zipIntent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "application/zip"
+                        putExtra(
+                            Intent.EXTRA_MIME_TYPES,
+                            arrayOf(
+                                "application/zip",
+                                "application/x-zip-compressed",
+                                "multipart/x-zip"
+                            )
+                        )
+                    }
+                    zipPickerLauncher.launch(zipIntent)
+                }
+            )
+        }
+
+        zipPasswordPrompt?.let { prompt ->
+            ZipPasswordDialog(
+                errorMessage = prompt.errorMessage,
+                passwordText = zipPasswordText,
+                onPasswordChange = { zipPasswordText = it },
+                isImporting = isImporting,
+                onConfirm = {
+                    viewModel.retryZipWithPassword(zipPasswordText)
+                    zipPasswordText = ""
+                },
+                onDismiss = {
+                    zipPasswordText = ""
+                    viewModel.dismissZipPasswordPrompt()
+                }
+            )
+        }
     }
 }
 
@@ -457,4 +567,3 @@ private fun formatDate(millis: Long): String {
     val sdf = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
     return sdf.format(Date(millis))
 }
-

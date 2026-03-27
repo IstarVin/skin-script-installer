@@ -1,5 +1,6 @@
 package com.istarvin.skinscriptinstaller.ui.screens.detail
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -9,10 +10,13 @@ import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.domain.ClassifyScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.InstallProgress
 import com.istarvin.skinscriptinstaller.domain.InstallScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
+import com.istarvin.skinscriptinstaller.service.InvalidPasswordException
+import com.istarvin.skinscriptinstaller.service.PasswordRequiredException
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,11 +38,17 @@ data class FileTreeNode(
     val depth: Int = 0
 )
 
+data class DetailZipPasswordPrompt(
+    val zipUri: Uri,
+    val errorMessage: String? = null
+)
+
 @HiltViewModel
 class ScriptDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: ScriptRepository,
     private val userSelectionManager: UserSelectionManager,
+    private val importScriptUseCase: ImportScriptUseCase,
     private val installScriptUseCase: InstallScriptUseCase,
     private val restoreScriptUseCase: RestoreScriptUseCase,
     private val classifyScriptUseCase: ClassifyScriptUseCase,
@@ -46,6 +56,7 @@ class ScriptDetailViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val scriptId: Long = savedStateHandle["scriptId"] ?: -1L
+    private var pendingReinstallUserId: Int? = null
 
     private val _script = MutableStateFlow<SkinScript?>(null)
     val script: StateFlow<SkinScript?> = _script.asStateFlow()
@@ -64,6 +75,12 @@ class ScriptDetailViewModel @Inject constructor(
 
     private val _isOperating = MutableStateFlow(false)
     val isOperating: StateFlow<Boolean> = _isOperating.asStateFlow()
+
+    private val _isImporting = MutableStateFlow(false)
+    val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
+
+    private val _zipPasswordPrompt = MutableStateFlow<DetailZipPasswordPrompt?>(null)
+    val zipPasswordPrompt: StateFlow<DetailZipPasswordPrompt?> = _zipPasswordPrompt.asStateFlow()
 
     // Classification state
     private val _heroName = MutableStateFlow<String?>(null)
@@ -332,6 +349,161 @@ class ScriptDetailViewModel @Inject constructor(
         }
     }
 
+    fun updateScript(treeUri: Uri) {
+        viewModelScope.launch {
+            performScriptUpdate {
+                importScriptUseCase.prepareTreeImport(treeUri)
+            }
+        }
+    }
+
+    fun updateZip(zipUri: Uri) {
+        updateZipInternal(zipUri, password = null)
+    }
+
+    fun retryZipWithPassword(password: String) {
+        val prompt = _zipPasswordPrompt.value ?: return
+        updateZipInternal(prompt.zipUri, password.toCharArray())
+    }
+
+    fun dismissZipPasswordPrompt() {
+        _zipPasswordPrompt.value = null
+    }
+
+    private fun updateZipInternal(zipUri: Uri, password: CharArray?) {
+        viewModelScope.launch {
+            performScriptUpdate(zipUriForPrompt = zipUri) {
+                importScriptUseCase.prepareZipImport(zipUri, password)
+            }
+        }
+    }
+
+    private suspend fun performScriptUpdate(
+        zipUriForPrompt: Uri? = null,
+        importer: suspend () -> Result<com.istarvin.skinscriptinstaller.domain.ImportedScriptPayload>
+    ) {
+        val currentScript = _script.value ?: run {
+            _error.value = "Script not found"
+            return
+        }
+
+        _isImporting.value = true
+        _isOperating.value = true
+        _error.value = null
+
+        val targetUserId = _selectedUserId.value
+        val activeInstallation = repository.getLatestInstallation(currentScript.id, targetUserId)
+        val wasInstalled = activeInstallation?.status == "installed"
+        val shouldReinstallAfterUpdate = pendingReinstallUserId == targetUserId || wasInstalled
+
+        if (!shouldReinstallAfterUpdate) {
+            pendingReinstallUserId = null
+        }
+
+        if (wasInstalled) {
+            restoreScriptUseCase.resetProgress()
+            val restoreResult = restoreScriptUseCase.execute(activeInstallation.id)
+            if (restoreResult.isFailure) {
+                _error.value = restoreResult.exceptionOrNull()?.message ?: "Update failed during restore"
+                _installation.value = repository.getLatestInstallation(currentScript.id, targetUserId)
+                pendingReinstallUserId = null
+                _isImporting.value = false
+                _isOperating.value = false
+                return
+            }
+            pendingReinstallUserId = targetUserId
+            _installation.value = repository.getLatestInstallation(currentScript.id, targetUserId)
+        }
+
+        val importedPayload = importer().getOrElse { error ->
+            when (error) {
+                is PasswordRequiredException -> {
+                    if (zipUriForPrompt != null) {
+                        _zipPasswordPrompt.value = DetailZipPasswordPrompt(zipUri = zipUriForPrompt)
+                    } else {
+                        _error.value = error.message ?: "Password required"
+                    }
+                }
+
+                is InvalidPasswordException -> {
+                    if (zipUriForPrompt != null) {
+                        _zipPasswordPrompt.value = DetailZipPasswordPrompt(
+                            zipUri = zipUriForPrompt,
+                            errorMessage = "Incorrect password, try again"
+                        )
+                    } else {
+                        _error.value = error.message ?: "Incorrect password"
+                    }
+                }
+
+                else -> {
+                    _zipPasswordPrompt.value = null
+                    _error.value = error.message ?: "Update failed during import"
+                    pendingReinstallUserId = null
+                }
+            }
+            _installation.value = repository.getLatestInstallation(currentScript.id, targetUserId)
+            _isImporting.value = false
+            _isOperating.value = false
+            return
+        }
+
+        _zipPasswordPrompt.value = null
+
+        val oldStorageDir = File(currentScript.storagePath)
+        val newStorageDir = File(importedPayload.storagePath)
+
+        try {
+            val updatedScript = currentScript.copy(
+                name = importedPayload.name,
+                importedAt = System.currentTimeMillis(),
+                storagePath = importedPayload.storagePath
+            )
+            repository.updateScript(updatedScript)
+            _script.value = updatedScript
+            buildFileTree(updatedScript.storagePath)
+
+            if (shouldReinstallAfterUpdate) {
+                userSelectionManager.selectUser(targetUserId)
+                installScriptUseCase.resetProgress()
+                val installResult = installScriptUseCase.execute(currentScript.id, targetUserId)
+                installResult.onSuccess {
+                    _installation.value = it
+                }.onFailure { e ->
+                    _error.value = e.message ?: "Update failed during install"
+                }
+            } else {
+                _installation.value = repository.getLatestInstallation(currentScript.id, targetUserId)
+            }
+
+            if (oldStorageDir.exists() && oldStorageDir.absolutePath != newStorageDir.absolutePath) {
+                oldStorageDir.deleteRecursively()
+            }
+
+            pendingReinstallUserId = null
+            refreshScript()
+        } catch (e: Exception) {
+            _error.value = e.message ?: "Update failed"
+            _installation.value = repository.getLatestInstallation(currentScript.id, targetUserId)
+        } finally {
+            if (_script.value?.storagePath != newStorageDir.absolutePath && newStorageDir.exists()) {
+                newStorageDir.deleteRecursively()
+            }
+            _isImporting.value = false
+            _isOperating.value = false
+        }
+    }
+
+    private suspend fun refreshScript() {
+        val refreshed = repository.getScriptById(scriptId)
+        _script.value = refreshed
+        refreshed?.let {
+            buildFileTree(it.storagePath)
+            loadInstallationForSelectedUser()
+            loadClassification(it)
+        }
+    }
+
     fun clearError() {
         _error.value = null
     }
@@ -424,4 +596,3 @@ class ScriptDetailViewModel @Inject constructor(
         }
     }
 }
-

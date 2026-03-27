@@ -16,6 +16,11 @@ import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
 
+data class ImportedScriptPayload(
+    val name: String,
+    val storagePath: String
+)
+
 /**
  * Imports a skin script folder from SAF into internal storage.
  *
@@ -37,41 +42,12 @@ class ImportScriptUseCase @Inject constructor(
 
     suspend fun execute(treeUri: Uri): Result<SkinScript> = withContext(Dispatchers.IO) {
         try {
-            val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
-                ?: return@withContext Result.failure(Exception("Cannot read selected folder"))
-
-            val scriptId = UUID.randomUUID().toString()
-            val scriptDir = File(context.filesDir, "scripts/$scriptId")
-
-            // Determine the structure type
-            val structureInfo = detectStructure(rootDoc)
-
-            if (structureInfo.type == StructureType.INVALID_NO_ART) {
-                return@withContext Result.failure(IllegalArgumentException(MISSING_ART_ERROR))
+            val preparedImport = prepareTreeImport(treeUri).getOrElse {
+                return@withContext Result.failure(it)
             }
-
-            when (structureInfo.type) {
-                StructureType.FULL_PATH -> {
-                    // Already has Android/data/com.mobile.legends/... structure — copy as-is
-                    copyDocumentTree(rootDoc, scriptDir)
-                }
-
-                StructureType.ART_FOLDER -> {
-                    // Art folder found (possibly nested) — copy from its parent into the ML path,
-                    // mirroring the Python logic that uses art_parent_path as the source.
-                    val destAssetsDir = File(scriptDir, ML_ASSETS_PREFIX)
-                    destAssetsDir.mkdirs()
-                    val sourceDoc = structureInfo.artParentDoc ?: rootDoc
-                    copyDocumentTree(sourceDoc, destAssetsDir)
-                }
-
-                StructureType.INVALID_NO_ART -> Unit
-            }
-
-            val name = rootDoc.name ?: "Unknown Script"
             val script = SkinScript(
-                name = name,
-                storagePath = scriptDir.absolutePath
+                name = preparedImport.name,
+                storagePath = preparedImport.storagePath
             )
             val insertedId = repository.insertScript(script)
             val insertedScript = script.copy(id = insertedId)
@@ -84,36 +60,67 @@ class ImportScriptUseCase @Inject constructor(
 
     suspend fun executeZip(zipUri: Uri, password: CharArray? = null): Result<SkinScript> =
         withContext(Dispatchers.IO) {
-            val tempZipFile = File(context.cacheDir, "import_${UUID.randomUUID()}.zip")
-            val tempExtractDir = File(context.cacheDir, "extract_${UUID.randomUUID()}")
-
             try {
-                copyUriToTempZip(zipUri, tempZipFile)
-
-                val inspection = archiveService.inspectZip(tempZipFile).getOrElse {
+                val preparedImport = prepareZipImport(zipUri, password).getOrElse {
                     return@withContext Result.failure(it)
                 }
-
-                if (inspection.encrypted && password == null) {
-                    return@withContext Result.failure(PasswordRequiredException())
-                }
-
-                archiveService.extractZip(tempZipFile, tempExtractDir, password).getOrElse {
-                    return@withContext Result.failure(it)
-                }
-
-                val extractedRoot = resolveExtractedRoot(tempExtractDir)
-                importFromFileRoot(extractedRoot, zipUri)
+                val script = SkinScript(
+                    name = preparedImport.name,
+                    storagePath = preparedImport.storagePath
+                )
+                val insertedId = repository.insertScript(script)
+                Result.success(script.copy(id = insertedId))
             } catch (e: Exception) {
                 Result.failure(e)
-            } finally {
-                tempZipFile.delete()
-                if (tempExtractDir.exists()) {
-                    tempExtractDir.deleteRecursively()
-                }
-                password?.fill('\u0000')
             }
         }
+
+    suspend fun prepareTreeImport(treeUri: Uri): Result<ImportedScriptPayload> =
+        withContext(Dispatchers.IO) {
+            try {
+                val rootDoc = DocumentFile.fromTreeUri(context, treeUri)
+                    ?: return@withContext Result.failure(Exception("Cannot read selected folder"))
+                val scriptDir = File(context.filesDir, "scripts/${UUID.randomUUID()}")
+                prepareImportIntoDirectory(rootDoc, scriptDir)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    suspend fun prepareZipImport(
+        zipUri: Uri,
+        password: CharArray? = null
+    ): Result<ImportedScriptPayload> = withContext(Dispatchers.IO) {
+        val tempZipFile = File(context.cacheDir, "import_${UUID.randomUUID()}.zip")
+        val tempExtractDir = File(context.cacheDir, "extract_${UUID.randomUUID()}")
+
+        try {
+            copyUriToTempZip(zipUri, tempZipFile)
+
+            val inspection = archiveService.inspectZip(tempZipFile).getOrElse {
+                return@withContext Result.failure(it)
+            }
+
+            if (inspection.encrypted && password == null) {
+                return@withContext Result.failure(PasswordRequiredException())
+            }
+
+            archiveService.extractZip(tempZipFile, tempExtractDir, password).getOrElse {
+                return@withContext Result.failure(it)
+            }
+
+            val extractedRoot = resolveExtractedRoot(tempExtractDir)
+            prepareImportFromFileRoot(extractedRoot, zipUri)
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            tempZipFile.delete()
+            if (tempExtractDir.exists()) {
+                tempExtractDir.deleteRecursively()
+            }
+            password?.fill('\u0000')
+        }
+    }
 
     private fun copyUriToTempZip(uri: Uri, destination: File) {
         destination.parentFile?.mkdirs()
@@ -124,13 +131,45 @@ class ImportScriptUseCase @Inject constructor(
         } ?: throw IOException("Unable to open selected ZIP file")
     }
 
-    private suspend fun importFromFileRoot(rootDir: File, sourceUri: Uri): Result<SkinScript> {
+    private fun prepareImportIntoDirectory(
+        rootDoc: DocumentFile,
+        scriptDir: File
+    ): Result<ImportedScriptPayload> {
+        val structureInfo = detectStructure(rootDoc)
+
+        if (structureInfo.type == StructureType.INVALID_NO_ART) {
+            return Result.failure(IllegalArgumentException(MISSING_ART_ERROR))
+        }
+
+        when (structureInfo.type) {
+            StructureType.FULL_PATH -> copyDocumentTree(rootDoc, scriptDir)
+            StructureType.ART_FOLDER -> {
+                val destAssetsDir = File(scriptDir, ML_ASSETS_PREFIX)
+                destAssetsDir.mkdirs()
+                val sourceDoc = structureInfo.artParentDoc ?: rootDoc
+                copyDocumentTree(sourceDoc, destAssetsDir)
+            }
+
+            StructureType.INVALID_NO_ART -> Unit
+        }
+
+        return Result.success(
+            ImportedScriptPayload(
+                name = rootDoc.name ?: "Unknown Script",
+                storagePath = scriptDir.absolutePath
+            )
+        )
+    }
+
+    private suspend fun prepareImportFromFileRoot(
+        rootDir: File,
+        sourceUri: Uri
+    ): Result<ImportedScriptPayload> {
         if (!rootDir.exists() || !rootDir.isDirectory) {
             return Result.failure(Exception("ZIP archive is empty"))
         }
 
-        val scriptId = UUID.randomUUID().toString()
-        val scriptDir = File(context.filesDir, "scripts/$scriptId")
+        val scriptDir = File(context.filesDir, "scripts/${UUID.randomUUID()}")
         val structureInfo = detectFileStructure(rootDir)
 
         if (structureInfo.type == StructureType.INVALID_NO_ART) {
@@ -153,12 +192,12 @@ class ImportScriptUseCase @Inject constructor(
         }
 
         val scriptName = queryDisplayName(sourceUri)?.removeSuffix(".zip") ?: rootDir.name
-        val script = SkinScript(
-            name = scriptName ?: "Imported ZIP",
-            storagePath = scriptDir.absolutePath
+        return Result.success(
+            ImportedScriptPayload(
+                name = scriptName ?: "Imported ZIP",
+                storagePath = scriptDir.absolutePath
+            )
         )
-        val insertedId = repository.insertScript(script)
-        return Result.success(script.copy(id = insertedId))
     }
 
     private fun queryDisplayName(uri: Uri): String? {
@@ -299,4 +338,3 @@ class ImportScriptUseCase @Inject constructor(
         INVALID_NO_ART
     }
 }
-
