@@ -62,6 +62,8 @@ import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.ui.components.ClassifyScriptDialog
 import com.istarvin.skinscriptinstaller.ui.components.HeroInstallConflictDialog
 import com.istarvin.skinscriptinstaller.ui.components.ImportChoiceBottomSheet
+import com.istarvin.skinscriptinstaller.ui.components.ImportFileConflictDialog
+import com.istarvin.skinscriptinstaller.ui.components.ImportFileConflictDialogItem
 import com.istarvin.skinscriptinstaller.ui.components.InstallStatusChip
 import com.istarvin.skinscriptinstaller.ui.components.ZipPasswordDialog
 import com.istarvin.skinscriptinstaller.ui.theme.AppAlpha
@@ -91,6 +93,7 @@ fun ScriptDetailScreen(
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val zipPasswordPrompt by viewModel.zipPasswordPrompt.collectAsState()
     val installConflictWarning by viewModel.installConflictWarning.collectAsState()
+    val updateImportConflictPrompt by viewModel.updateImportConflictPrompt.collectAsState()
     val error by viewModel.error.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -521,6 +524,23 @@ fun ScriptDetailScreen(
                 conflictingScriptNames = warning.conflicts.map { it.scriptName },
                 onProceed = viewModel::confirmInstallConflictWarning,
                 onDismiss = viewModel::dismissInstallConflictWarning
+            )
+        }
+
+        updateImportConflictPrompt?.let { prompt ->
+            ImportFileConflictDialog(
+                operationLabel = "Update",
+                conflicts = prompt.files.map { conflict ->
+                    ImportFileConflictDialogItem(
+                        relativePath = conflict.relativePath,
+                        existingScriptNames = conflict.existingScriptNames,
+                        choice = conflict.choice
+                    )
+                },
+                isProcessing = isImporting,
+                onChoiceChange = viewModel::updateUpdateConflictChoice,
+                onConfirm = viewModel::confirmUpdateConflictResolution,
+                onDismiss = viewModel::dismissUpdateConflictPrompt
             )
         }
     }

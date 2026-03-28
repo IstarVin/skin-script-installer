@@ -9,7 +9,11 @@ import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
 import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
+import com.istarvin.skinscriptinstaller.domain.ImportConflictResolutionChoice
+import com.istarvin.skinscriptinstaller.domain.ImportConflictScriptRef
+import com.istarvin.skinscriptinstaller.domain.ImportFileConflict
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.ImportedScriptPayload
 import com.istarvin.skinscriptinstaller.domain.ReinstallReplacedScriptsUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
@@ -385,9 +389,10 @@ class ScriptListViewModelTest {
     @Test
     fun `importScript calls use case and clears error on success`() = runTest {
         val importedScript = SkinScript(id = 1L, name = "Test", storagePath = "/path")
-        coEvery { importScriptUseCase.execute(any()) } answers {
-            Result.success(importedScript)
-        }
+        val preparedImport = ImportedScriptPayload(name = "Test", storagePath = "/prepared")
+        coEvery { importScriptUseCase.prepareTreeImport(any()) } returns Result.success(preparedImport)
+        coEvery { importScriptUseCase.detectFileConflicts(preparedImport, null) } returns Result.success(emptyList())
+        coEvery { importScriptUseCase.persistPreparedImport(preparedImport) } returns Result.success(importedScript)
         createViewModel()
 
         val uri = mockk<Uri>(relaxed = true)
@@ -397,12 +402,14 @@ class ScriptListViewModelTest {
         assertNull(viewModel.importError.value)
         assertFalse(viewModel.isImporting.value)
         assertEquals(importedScript.id, viewModel.pendingClassificationScriptId.value)
-        coVerify { importScriptUseCase.execute(uri) }
+        coVerify { importScriptUseCase.prepareTreeImport(uri) }
+        coVerify { importScriptUseCase.detectFileConflicts(preparedImport, null) }
+        coVerify { importScriptUseCase.persistPreparedImport(preparedImport) }
     }
 
     @Test
     fun `importScript sets error message on failure`() = runTest {
-        coEvery { importScriptUseCase.execute(any()) } answers {
+        coEvery { importScriptUseCase.prepareTreeImport(any()) } answers {
             Result.failure(Exception("Import failed"))
         }
         createViewModel()
@@ -417,7 +424,7 @@ class ScriptListViewModelTest {
 
     @Test
     fun `importZip triggers password prompt on PasswordRequiredException`() = runTest {
-        coEvery { importScriptUseCase.executeZip(any(), any()) } answers {
+        coEvery { importScriptUseCase.prepareZipImport(any(), any()) } answers {
             Result.failure(PasswordRequiredException())
         }
         createViewModel()
@@ -434,7 +441,7 @@ class ScriptListViewModelTest {
 
     @Test
     fun `importZip triggers password prompt with error on InvalidPasswordException`() = runTest {
-        coEvery { importScriptUseCase.executeZip(any(), any()) } answers {
+        coEvery { importScriptUseCase.prepareZipImport(any(), any()) } answers {
             Result.failure(InvalidPasswordException())
         }
         createViewModel()
@@ -450,7 +457,7 @@ class ScriptListViewModelTest {
 
     @Test
     fun `importZip sets general error on other exceptions`() = runTest {
-        coEvery { importScriptUseCase.executeZip(any(), any()) } answers {
+        coEvery { importScriptUseCase.prepareZipImport(any(), any()) } answers {
             Result.failure(Exception("General error"))
         }
         createViewModel()
@@ -467,17 +474,22 @@ class ScriptListViewModelTest {
     fun `retryZipWithPassword retries with password`() = runTest {
         val uri = mockk<Uri>(relaxed = true)
         val importedScript = SkinScript(id = 1L, name = "Test", storagePath = "/path")
+        val preparedImport = ImportedScriptPayload(name = "Test", storagePath = "/prepared")
 
         // First call triggers password prompt, second call succeeds
         var callCount = 0
-        coEvery { importScriptUseCase.executeZip(any(), any()) } answers {
+        coEvery { importScriptUseCase.prepareZipImport(any(), any()) } answers {
             callCount++
             if (callCount == 1) {
                 Result.failure(PasswordRequiredException())
             } else {
-                Result.success(importedScript)
+                Result.success(preparedImport)
             }
         }
+        coEvery { importScriptUseCase.detectFileConflicts(preparedImport, null) } returns
+            Result.success(emptyList())
+        coEvery { importScriptUseCase.persistPreparedImport(preparedImport) } returns
+            Result.success(importedScript)
 
         createViewModel()
 
@@ -494,7 +506,7 @@ class ScriptListViewModelTest {
 
     @Test
     fun `dismissZipPasswordPrompt clears prompt`() = runTest {
-        coEvery { importScriptUseCase.executeZip(any(), any()) } answers {
+        coEvery { importScriptUseCase.prepareZipImport(any(), any()) } answers {
             Result.failure(PasswordRequiredException())
         }
         createViewModel()
@@ -510,9 +522,11 @@ class ScriptListViewModelTest {
 
     @Test
     fun `dismissPendingClassification clears pending script id`() = runTest {
-        coEvery { importScriptUseCase.execute(any()) } answers {
-            Result.success(SkinScript(id = 7L, name = "Test", storagePath = "/path"))
-        }
+        val preparedImport = ImportedScriptPayload(name = "Test", storagePath = "/prepared")
+        val importedScript = SkinScript(id = 7L, name = "Test", storagePath = "/path")
+        coEvery { importScriptUseCase.prepareTreeImport(any()) } returns Result.success(preparedImport)
+        coEvery { importScriptUseCase.detectFileConflicts(preparedImport, null) } returns Result.success(emptyList())
+        coEvery { importScriptUseCase.persistPreparedImport(preparedImport) } returns Result.success(importedScript)
         createViewModel()
 
         viewModel.importScript(mockk(relaxed = true))
@@ -522,6 +536,107 @@ class ScriptListViewModelTest {
         viewModel.dismissPendingClassification()
 
         assertNull(viewModel.pendingClassificationScriptId.value)
+    }
+
+    @Test
+    fun `importScript with file conflicts shows conflict prompt and waits for confirmation`() =
+        runTest {
+            val preparedImport = ImportedScriptPayload(name = "Test", storagePath = "/prepared")
+            val conflicts = listOf(
+                ImportFileConflict(
+                    relativePath = "Art/shared.png",
+                    existingScripts = listOf(
+                        ImportConflictScriptRef(scriptId = 2L, scriptName = "Existing Script")
+                    )
+                )
+            )
+            coEvery { importScriptUseCase.prepareTreeImport(any()) } returns Result.success(preparedImport)
+            coEvery { importScriptUseCase.detectFileConflicts(preparedImport, null) } returns
+                Result.success(conflicts)
+
+            createViewModel()
+
+            viewModel.importScript(mockk(relaxed = true))
+            advanceUntilIdle()
+
+            val prompt = viewModel.importConflictPrompt.value
+            assertNotNull(prompt)
+            assertEquals(1, prompt!!.files.size)
+            assertEquals("Art/shared.png", prompt.files.first().relativePath)
+            assertNull(viewModel.pendingClassificationScriptId.value)
+            coVerify(exactly = 0) { importScriptUseCase.persistPreparedImport(any()) }
+        }
+
+    @Test
+    fun `confirmImportConflictResolution applies choices then persists script`() = runTest {
+        val preparedImport = ImportedScriptPayload(name = "Test", storagePath = "/prepared")
+        val importedScript = SkinScript(id = 8L, name = "Test", storagePath = "/prepared")
+        val conflicts = listOf(
+            ImportFileConflict(
+                relativePath = "Art/shared.png",
+                existingScripts = listOf(
+                    ImportConflictScriptRef(scriptId = 2L, scriptName = "Existing Script")
+                )
+            )
+        )
+
+        coEvery { importScriptUseCase.prepareTreeImport(any()) } returns Result.success(preparedImport)
+        coEvery { importScriptUseCase.detectFileConflicts(preparedImport, null) } returns
+            Result.success(conflicts)
+        coEvery {
+            importScriptUseCase.applyConflictChoices(
+                preparedImport = preparedImport,
+                conflicts = conflicts,
+                choices = mapOf(
+                    "Art/shared.png" to ImportConflictResolutionChoice.USE_IMPORTED
+                )
+            )
+        } returns Result.success(preparedImport)
+        coEvery { importScriptUseCase.persistPreparedImport(preparedImport) } returns
+            Result.success(importedScript)
+
+        createViewModel()
+
+        viewModel.importScript(mockk(relaxed = true))
+        advanceUntilIdle()
+        viewModel.updateImportConflictChoice(
+            relativePath = "Art/shared.png",
+            choice = ImportConflictResolutionChoice.USE_IMPORTED
+        )
+        viewModel.confirmImportConflictResolution()
+        advanceUntilIdle()
+
+        assertNull(viewModel.importConflictPrompt.value)
+        assertEquals(importedScript.id, viewModel.pendingClassificationScriptId.value)
+    }
+
+    @Test
+    fun `dismissImportConflictPrompt cancels and cleans prepared import`() = runTest {
+        val preparedImport = ImportedScriptPayload(name = "Test", storagePath = "/prepared")
+        val conflicts = listOf(
+            ImportFileConflict(
+                relativePath = "Art/shared.png",
+                existingScripts = listOf(
+                    ImportConflictScriptRef(scriptId = 2L, scriptName = "Existing Script")
+                )
+            )
+        )
+        coEvery { importScriptUseCase.prepareTreeImport(any()) } returns Result.success(preparedImport)
+        coEvery { importScriptUseCase.detectFileConflicts(preparedImport, null) } returns
+            Result.success(conflicts)
+        coEvery { importScriptUseCase.cleanupPreparedImport(preparedImport) } just Runs
+
+        createViewModel()
+
+        viewModel.importScript(mockk(relaxed = true))
+        advanceUntilIdle()
+        assertNotNull(viewModel.importConflictPrompt.value)
+
+        viewModel.dismissImportConflictPrompt()
+        advanceUntilIdle()
+
+        assertNull(viewModel.importConflictPrompt.value)
+        coVerify { importScriptUseCase.cleanupPreparedImport(preparedImport) }
     }
 
     @Test
@@ -581,7 +696,7 @@ class ScriptListViewModelTest {
 
     @Test
     fun `clearImportError resets error state`() = runTest {
-        coEvery { importScriptUseCase.execute(any()) } answers {
+        coEvery { importScriptUseCase.prepareTreeImport(any()) } answers {
             Result.failure(Exception("error"))
         }
         createViewModel()

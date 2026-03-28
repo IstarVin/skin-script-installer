@@ -1,5 +1,6 @@
 package com.istarvin.skinscriptinstaller.ui.screens.detail
 
+import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import com.istarvin.skinscriptinstaller.IFileService
 import com.istarvin.skinscriptinstaller.data.db.entity.Hero
@@ -10,7 +11,11 @@ import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
 import com.istarvin.skinscriptinstaller.domain.ClassifyScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.ImportConflictResolutionChoice
+import com.istarvin.skinscriptinstaller.domain.ImportConflictScriptRef
+import com.istarvin.skinscriptinstaller.domain.ImportFileConflict
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.ImportedScriptPayload
 import com.istarvin.skinscriptinstaller.domain.InstallProgress
 import com.istarvin.skinscriptinstaller.domain.InstallScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
@@ -614,5 +619,150 @@ class ScriptDetailViewModelTest {
         assertEquals("Miya", vm.suggestedHeroName.value)
 
         collectJob.cancel()
+    }
+
+    @Test
+    fun `updateScript with file conflicts opens prompt before restore or install`() = runTest {
+        val existingStorage = tempFolder.newFolder("existing_storage")
+        val script = SkinScript(id = 1L, name = "Test", storagePath = existingStorage.absolutePath)
+        val installation = Installation(
+            id = 10L,
+            scriptId = 1L,
+            userId = 0,
+            status = InstallationStatus.INSTALLED
+        )
+        val preparedImport = ImportedScriptPayload(name = "Updated", storagePath = "/prepared")
+        val conflicts = listOf(
+            ImportFileConflict(
+                relativePath = "Art/shared.png",
+                existingScripts = listOf(
+                    ImportConflictScriptRef(scriptId = 2L, scriptName = "Existing")
+                )
+            )
+        )
+
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery { repository.getLatestInstallation(1L, 0) } returns installation
+        every { repository.observeLatestInstallation(1L, 0) } returns flowOf(installation)
+        coEvery { importScriptUseCase.prepareTreeImport(any()) } returns Result.success(preparedImport)
+        coEvery { importScriptUseCase.detectFileConflicts(preparedImport, 1L) } returns
+            Result.success(conflicts)
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.updateScript(mockk<Uri>(relaxed = true))
+        advanceUntilIdle()
+
+        assertNotNull(vm.updateImportConflictPrompt.value)
+        coVerify(exactly = 0) { restoreScriptUseCase.execute(any()) }
+        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any()) }
+    }
+
+    @Test
+    fun `confirmUpdateConflictResolution applies choices then runs restore and install`() = runTest {
+        val existingStorage = tempFolder.newFolder("existing_storage_confirm")
+        val preparedStorage = tempFolder.newFolder("prepared_storage_confirm")
+        val script = SkinScript(id = 1L, name = "Test", storagePath = existingStorage.absolutePath)
+        val installation = Installation(
+            id = 10L,
+            scriptId = 1L,
+            userId = 0,
+            status = InstallationStatus.INSTALLED
+        )
+        val updatedInstallation = Installation(
+            id = 20L,
+            scriptId = 1L,
+            userId = 0,
+            status = InstallationStatus.INSTALLED
+        )
+        val preparedImport = ImportedScriptPayload(name = "Updated", storagePath = preparedStorage.absolutePath)
+        val conflicts = listOf(
+            ImportFileConflict(
+                relativePath = "Art/shared.png",
+                existingScripts = listOf(
+                    ImportConflictScriptRef(scriptId = 2L, scriptName = "Existing")
+                )
+            )
+        )
+
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery { repository.getLatestInstallation(1L, 0) } returns installation
+        every { repository.observeLatestInstallation(1L, 0) } returns flowOf(installation)
+        coEvery { importScriptUseCase.prepareTreeImport(any()) } returns Result.success(preparedImport)
+        coEvery { importScriptUseCase.detectFileConflicts(preparedImport, 1L) } returns
+            Result.success(conflicts)
+        coEvery {
+            importScriptUseCase.applyConflictChoices(
+                preparedImport = preparedImport,
+                conflicts = conflicts,
+                choices = mapOf(
+                    "Art/shared.png" to ImportConflictResolutionChoice.USE_IMPORTED
+                )
+            )
+        } returns Result.success(preparedImport)
+        coEvery { restoreScriptUseCase.execute(10L) } returns Result.success(Unit)
+        coEvery { installScriptUseCase.execute(1L, 0) } returns Result.success(updatedInstallation)
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.updateScript(mockk<Uri>(relaxed = true))
+        advanceUntilIdle()
+        vm.updateUpdateConflictChoice(
+            relativePath = "Art/shared.png",
+            choice = ImportConflictResolutionChoice.USE_IMPORTED
+        )
+        vm.confirmUpdateConflictResolution()
+        advanceUntilIdle()
+
+        assertNull(vm.updateImportConflictPrompt.value)
+        coVerify { restoreScriptUseCase.execute(10L) }
+        coVerify { installScriptUseCase.execute(1L, 0) }
+        coVerify { repository.updateScript(match { it.name == "Updated" }) }
+    }
+
+    @Test
+    fun `dismissUpdateConflictPrompt cleans prepared import without side effects`() = runTest {
+        val existingStorage = tempFolder.newFolder("existing_storage_cancel")
+        val script = SkinScript(id = 1L, name = "Test", storagePath = existingStorage.absolutePath)
+        val installation = Installation(
+            id = 10L,
+            scriptId = 1L,
+            userId = 0,
+            status = InstallationStatus.INSTALLED
+        )
+        val preparedImport = ImportedScriptPayload(name = "Updated", storagePath = "/prepared")
+        val conflicts = listOf(
+            ImportFileConflict(
+                relativePath = "Art/shared.png",
+                existingScripts = listOf(
+                    ImportConflictScriptRef(scriptId = 2L, scriptName = "Existing")
+                )
+            )
+        )
+
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery { repository.getLatestInstallation(1L, 0) } returns installation
+        every { repository.observeLatestInstallation(1L, 0) } returns flowOf(installation)
+        coEvery { importScriptUseCase.prepareTreeImport(any()) } returns Result.success(preparedImport)
+        coEvery { importScriptUseCase.detectFileConflicts(preparedImport, 1L) } returns
+            Result.success(conflicts)
+        coEvery { importScriptUseCase.cleanupPreparedImport(preparedImport) } just Runs
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.updateScript(mockk<Uri>(relaxed = true))
+        advanceUntilIdle()
+        assertNotNull(vm.updateImportConflictPrompt.value)
+
+        vm.dismissUpdateConflictPrompt()
+        advanceUntilIdle()
+
+        assertNull(vm.updateImportConflictPrompt.value)
+        coVerify { importScriptUseCase.cleanupPreparedImport(preparedImport) }
+        coVerify(exactly = 0) { restoreScriptUseCase.execute(any()) }
+        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any()) }
     }
 }
