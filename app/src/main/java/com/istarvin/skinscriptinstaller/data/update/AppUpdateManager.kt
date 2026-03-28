@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -18,9 +19,13 @@ class AppUpdateManager @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) {
 
-    suspend fun downloadUpdate(apkUrl: String, version: String): Result<Uri> = withContext(Dispatchers.IO) {
+    suspend fun downloadUpdate(
+        apkUrl: String,
+        version: String,
+        onProgress: ((UpdateDownloadProgress) -> Unit)? = null
+    ): Result<Uri> = withContext(Dispatchers.IO) {
         runCatching {
-            val updatesDir = File(context.cacheDir, "updates").apply {
+            val updatesDir = File(context.filesDir, "updates").apply {
                 mkdirs()
             }
             updatesDir.listFiles()?.forEach(File::delete)
@@ -44,10 +49,46 @@ class AppUpdateManager @Inject constructor(
                     throw IOException("Download failed with HTTP ${connection.responseCode}")
                 }
 
+                val totalBytes = connection.contentLengthLong.takeIf { it > 0L }
+                var downloadedBytes = 0L
+                onProgress?.invoke(
+                    UpdateDownloadProgress(
+                        version = version,
+                        bytesDownloaded = downloadedBytes,
+                        totalBytes = totalBytes
+                    )
+                )
+
                 connection.inputStream.use { input ->
-                    targetFile.outputStream().use { output ->
-                        input.copyTo(output)
+                    FileOutputStream(targetFile).use { output ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            val bytesRead = input.read(buffer)
+                            if (bytesRead < 0) {
+                                break
+                            }
+                            output.write(buffer, 0, bytesRead)
+                            downloadedBytes += bytesRead
+                            onProgress?.invoke(
+                                UpdateDownloadProgress(
+                                    version = version,
+                                    bytesDownloaded = downloadedBytes,
+                                    totalBytes = totalBytes
+                                )
+                            )
+                        }
+                        output.flush()
                     }
+                }
+
+                if (downloadedBytes <= 0L) {
+                    throw IOException("Downloaded update file is empty")
+                }
+
+                if (totalBytes != null && downloadedBytes != totalBytes) {
+                    throw IOException(
+                        "Download incomplete: expected $totalBytes bytes but received $downloadedBytes"
+                    )
                 }
             } catch (error: Throwable) {
                 targetFile.delete()

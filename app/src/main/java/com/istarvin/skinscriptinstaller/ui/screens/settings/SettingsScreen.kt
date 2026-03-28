@@ -57,6 +57,7 @@ fun SettingsScreen(
     isUpdateActionRunning: Boolean = false,
     updateActionLabel: String = "Checking for updates...",
     updateCheckMessage: String? = null,
+    updateProgress: Float? = null,
     onEditCatalog: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
@@ -136,7 +137,8 @@ fun SettingsScreen(
         onCheckForUpdates = onCheckForUpdates,
         isUpdateActionRunning = isUpdateActionRunning,
         updateActionLabel = updateActionLabel,
-        updateCheckMessage = visibleUpdateCheckMessage
+        updateCheckMessage = visibleUpdateCheckMessage,
+        updateProgress = updateProgress
     )
 }
 
@@ -167,7 +169,8 @@ fun SettingsContent(
     onCheckForUpdates: () -> Unit,
     isUpdateActionRunning: Boolean,
     updateActionLabel: String,
-    updateCheckMessage: String?
+    updateCheckMessage: String?,
+    updateProgress: Float?
 ) {
     val setupState = remember(isShizukuAvailable, isPermissionGranted, isServiceBound) {
         ShizukuSetupState.from(
@@ -193,6 +196,7 @@ fun SettingsContent(
             ),
             isInProgress = isBackupOperationRunning,
             progressLabel = "Processing backup operation...",
+            progress = null,
             message = backupMessage,
             messageTone = feedbackTone(
                 message = backupMessage,
@@ -216,6 +220,7 @@ fun SettingsContent(
             ),
             isInProgress = isRefreshingCatalog,
             progressLabel = "Fetching hero catalog...",
+            progress = null,
             message = catalogRefreshMessage,
             messageTone = feedbackTone(
                 message = catalogRefreshMessage,
@@ -234,6 +239,7 @@ fun SettingsContent(
             ),
             isInProgress = isUpdateActionRunning,
             progressLabel = updateActionLabel,
+            progress = updateProgress,
             message = updateCheckMessage?.takeUnless { isUpdateActionRunning },
             messageTone = feedbackTone(
                 message = updateCheckMessage?.takeUnless { isUpdateActionRunning },
@@ -450,6 +456,7 @@ private data class MaintenanceBlockState(
     val secondaryAction: SettingsActionButton? = null,
     val isInProgress: Boolean,
     val progressLabel: String,
+    val progress: Float?,
     val message: String?,
     val messageTone: SettingsTone,
     val testTag: String

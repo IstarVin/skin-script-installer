@@ -254,6 +254,7 @@ fun SettingsActionBlock(
     secondaryAction: SettingsActionButton? = null,
     isInProgress: Boolean = false,
     progressLabel: String? = null,
+    progress: Float? = null,
     message: String? = null,
     messageTone: SettingsTone = SettingsTone.Neutral
 ) {
@@ -288,7 +289,14 @@ fun SettingsActionBlock(
 
         if (isInProgress) {
             Column(verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceXs)) {
-                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                if (progress != null) {
+                    LinearProgressIndicator(
+                        progress = { progress.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
                 progressLabel?.let {
                     Text(
                         text = it,

@@ -100,7 +100,7 @@ class SettingsContentTest {
         setSettingsContent(
             backupMessage = "Backup export completed",
             isRefreshingCatalog = true,
-            updateCheckMessage = "App is up to date"
+            updateCheckMessage = "Version 1.4.0 downloaded. Tap the notification to install."
         )
 
         composeRule.waitForIdle()
@@ -130,7 +130,22 @@ class SettingsContentTest {
                 hasAnyAncestor(hasTestTag(SettingsTestTags.MaintenanceCatalog))
         ).assertExists()
         composeRule.onNode(
-            hasText("App is up to date") and
+            hasText("Version 1.4.0 downloaded. Tap the notification to install.") and
+                hasAnyAncestor(hasTestTag(SettingsTestTags.MaintenanceUpdates))
+        ).assertExists()
+    }
+
+    @Test
+    fun updateProgressUsesScopedProgressState() {
+        setSettingsContent(
+            isUpdateActionRunning = true,
+            updateActionLabel = "Downloading update... 50%",
+            updateCheckMessage = "Downloading version 1.4.0 in the background... 50%",
+            updateProgress = 0.5f
+        )
+
+        composeRule.onNode(
+            hasText("Downloading update... 50%") and
                 hasAnyAncestor(hasTestTag(SettingsTestTags.MaintenanceUpdates))
         ).assertExists()
     }
@@ -148,7 +163,10 @@ class SettingsContentTest {
         restoreAllMessage: String? = null,
         onRestoreAll: () -> Unit = {},
         isRefreshingCatalog: Boolean = false,
-        updateCheckMessage: String? = null
+        updateCheckMessage: String? = null,
+        isUpdateActionRunning: Boolean = false,
+        updateActionLabel: String = "Checking for updates...",
+        updateProgress: Float? = null
     ) {
         composeRule.setContent {
             SkinScriptInstallerTheme {
@@ -174,8 +192,10 @@ class SettingsContentTest {
                     isRefreshingCatalog = isRefreshingCatalog,
                     catalogRefreshMessage = null,
                     onCheckForUpdates = {},
-                    isCheckingForUpdates = false,
-                    updateCheckMessage = updateCheckMessage
+                    isUpdateActionRunning = isUpdateActionRunning,
+                    updateActionLabel = updateActionLabel,
+                    updateCheckMessage = updateCheckMessage,
+                    updateProgress = updateProgress
                 )
             }
         }

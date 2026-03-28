@@ -1,13 +1,14 @@
 package com.istarvin.skinscriptinstaller.ui.screens.settings
 
 import app.cash.turbine.test
-import com.istarvin.skinscriptinstaller.data.update.AppUpdateManager
+import com.istarvin.skinscriptinstaller.data.update.UpdateDownloadStarter
+import com.istarvin.skinscriptinstaller.data.update.UpdateDownloadTracker
 import com.istarvin.skinscriptinstaller.domain.CheckForUpdateUseCase
 import com.istarvin.skinscriptinstaller.domain.ReleaseInfo
 import io.mockk.coEvery
-import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -24,7 +25,8 @@ import org.junit.Test
 class UpdateCheckViewModelTest {
 
     private lateinit var checkForUpdateUseCase: CheckForUpdateUseCase
-    private lateinit var appUpdateManager: AppUpdateManager
+    private lateinit var updateDownloadStarter: UpdateDownloadStarter
+    private lateinit var updateDownloadTracker: UpdateDownloadTracker
 
     private val testDispatcher = UnconfinedTestDispatcher()
 
@@ -32,7 +34,8 @@ class UpdateCheckViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         checkForUpdateUseCase = mockk()
-        appUpdateManager = mockk()
+        updateDownloadStarter = mockk()
+        updateDownloadTracker = UpdateDownloadTracker()
     }
 
     @After
@@ -41,30 +44,35 @@ class UpdateCheckViewModelTest {
     }
 
     @Test
-    fun `startUpdate downloads apk and emits install event when permission is granted`() = runTest {
+    fun `startUpdate begins a background download when apk asset is available`() = runTest {
         val releaseInfo = ReleaseInfo(
             version = "1.3.9",
             releaseNotes = "Bug fixes",
             releaseUrl = "https://github.com/IstarVin/skin-script-installer/releases/tag/v1.3.9",
             apkUrl = "https://github.com/IstarVin/skin-script-installer/releases/download/v1.3.9/app.apk"
         )
-        val apkUri = mockk<android.net.Uri>()
         coEvery { checkForUpdateUseCase.execute() } returns Result.success(releaseInfo)
-        coEvery { appUpdateManager.downloadUpdate(releaseInfo.apkUrl!!, releaseInfo.version) } returns Result.success(apkUri)
-        every { appUpdateManager.canRequestPackageInstalls() } returns true
+        every {
+            updateDownloadStarter.startDownload(releaseInfo.apkUrl!!, releaseInfo.version)
+        } returns Result.success(Unit)
 
-        val viewModel = UpdateCheckViewModel(checkForUpdateUseCase, appUpdateManager)
+        val viewModel = UpdateCheckViewModel(
+            checkForUpdateUseCase,
+            updateDownloadStarter,
+            updateDownloadTracker
+        )
         advanceUntilIdle()
 
-        viewModel.events.test {
-            viewModel.startUpdate()
-            advanceUntilIdle()
+        viewModel.startUpdate()
+        advanceUntilIdle()
 
-            assertEquals(UpdateEvent.LaunchInstaller(apkUri), awaitItem())
-            cancelAndIgnoreRemainingEvents()
+        verify(exactly = 1) {
+            updateDownloadStarter.startDownload(releaseInfo.apkUrl!!, releaseInfo.version)
         }
-
-        assertEquals(UpdateState.Idle, viewModel.updateState.value)
+        assertEquals(
+            UpdateState.Downloading(version = releaseInfo.version),
+            viewModel.updateState.value
+        )
     }
 
     @Test
@@ -77,7 +85,11 @@ class UpdateCheckViewModelTest {
         )
         coEvery { checkForUpdateUseCase.execute() } returns Result.success(releaseInfo)
 
-        val viewModel = UpdateCheckViewModel(checkForUpdateUseCase, appUpdateManager)
+        val viewModel = UpdateCheckViewModel(
+            checkForUpdateUseCase,
+            updateDownloadStarter,
+            updateDownloadTracker
+        )
         advanceUntilIdle()
 
         viewModel.events.test {
@@ -88,37 +100,60 @@ class UpdateCheckViewModelTest {
             cancelAndIgnoreRemainingEvents()
         }
 
-        coVerify(exactly = 0) { appUpdateManager.downloadUpdate(any(), any()) }
+        verify(exactly = 0) { updateDownloadStarter.startDownload(any(), any()) }
         assertEquals(UpdateState.Idle, viewModel.updateState.value)
     }
 
     @Test
-    fun `resumeInstallAfterPermissionCheck launches installer after permission is granted`() = runTest {
-        val releaseInfo = ReleaseInfo(
-            version = "1.3.9",
-            releaseNotes = "Bug fixes",
-            releaseUrl = "https://github.com/IstarVin/skin-script-installer/releases/tag/v1.3.9",
-            apkUrl = "https://github.com/IstarVin/skin-script-installer/releases/download/v1.3.9/app.apk"
-        )
-        val apkUri = mockk<android.net.Uri>()
-        coEvery { checkForUpdateUseCase.execute() } returns Result.success(releaseInfo)
-        coEvery { appUpdateManager.downloadUpdate(releaseInfo.apkUrl!!, releaseInfo.version) } returns Result.success(apkUri)
-        every { appUpdateManager.canRequestPackageInstalls() } returnsMany listOf(false, true)
+    fun `download tracker completion is reflected in update state`() = runTest {
+        coEvery { checkForUpdateUseCase.execute() } returns Result.success(null)
 
-        val viewModel = UpdateCheckViewModel(checkForUpdateUseCase, appUpdateManager)
+        val viewModel = UpdateCheckViewModel(
+            checkForUpdateUseCase,
+            updateDownloadStarter,
+            updateDownloadTracker
+        )
         advanceUntilIdle()
 
-        viewModel.events.test {
-            viewModel.startUpdate()
-            advanceUntilIdle()
-            assertEquals(UpdateEvent.OpenUnknownAppSourcesSettings, awaitItem())
+        updateDownloadTracker.markCompleted("1.4.0")
+        advanceUntilIdle()
 
-            viewModel.resumeInstallAfterPermissionCheck()
-            advanceUntilIdle()
-            assertEquals(UpdateEvent.LaunchInstaller(apkUri), awaitItem())
-            cancelAndIgnoreRemainingEvents()
-        }
+        assertEquals(UpdateState.Downloaded("1.4.0"), viewModel.updateState.value)
+    }
 
-        assertEquals(UpdateState.Idle, viewModel.updateState.value)
+    @Test
+    fun `download tracker failure is reflected in update state`() = runTest {
+        coEvery { checkForUpdateUseCase.execute() } returns Result.success(null)
+
+        val viewModel = UpdateCheckViewModel(
+            checkForUpdateUseCase,
+            updateDownloadStarter,
+            updateDownloadTracker
+        )
+        advanceUntilIdle()
+
+        updateDownloadTracker.markFailed("1.4.0", "Network down")
+        advanceUntilIdle()
+
+        assertEquals(UpdateState.Error("Network down"), viewModel.updateState.value)
+    }
+
+    @Test
+    fun `notification permission denial surfaces an error`() = runTest {
+        coEvery { checkForUpdateUseCase.execute() } returns Result.success(null)
+
+        val viewModel = UpdateCheckViewModel(
+            checkForUpdateUseCase,
+            updateDownloadStarter,
+            updateDownloadTracker
+        )
+        advanceUntilIdle()
+
+        viewModel.onNotificationPermissionDenied()
+
+        assertEquals(
+            UpdateState.Error("Allow notifications to show update download progress"),
+            viewModel.updateState.value
+        )
     }
 }

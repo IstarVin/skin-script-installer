@@ -1,8 +1,9 @@
 package com.istarvin.skinscriptinstaller.ui.navigation
 
-import android.content.ActivityNotFoundException
+import android.Manifest
 import android.content.Intent
-import android.provider.Settings
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -10,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
@@ -31,10 +33,14 @@ fun AppNavHost(navController: NavHostController) {
     val context = LocalContext.current
     val updateViewModel: UpdateCheckViewModel = hiltViewModel()
     val updateState by updateViewModel.updateState.collectAsState()
-    val unknownSourcesLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) {
-        updateViewModel.resumeInstallAfterPermissionCheck()
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            updateViewModel.startUpdate()
+        } else {
+            updateViewModel.onNotificationPermissionDenied()
+        }
     }
 
     LaunchedEffect(updateViewModel, context) {
@@ -42,31 +48,6 @@ fun AppNavHost(navController: NavHostController) {
             when (event) {
                 is UpdateEvent.OpenReleasePage -> {
                     context.startActivity(Intent(Intent.ACTION_VIEW, event.releaseUrl.toUri()))
-                }
-
-                UpdateEvent.OpenUnknownAppSourcesSettings -> {
-                    val intent = Intent(
-                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                        "package:${context.packageName}".toUri()
-                    )
-                    unknownSourcesLauncher.launch(intent)
-                }
-
-                is UpdateEvent.LaunchInstaller -> {
-                    val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                        setDataAndType(event.apkUri, "application/vnd.android.package-archive")
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    try {
-                        context.startActivity(installIntent)
-                    } catch (_: ActivityNotFoundException) {
-                        updateViewModel.onInstallLaunchFailed("No package installer was found")
-                    } catch (error: SecurityException) {
-                        updateViewModel.onInstallLaunchFailed(
-                            error.message ?: "Unable to launch package installer"
-                        )
-                    }
                 }
             }
         }
@@ -78,7 +59,21 @@ fun AppNavHost(navController: NavHostController) {
             version = state.version,
             releaseNotes = state.releaseNotes,
             isDirectInstallSupported = !state.apkUrl.isNullOrBlank(),
-            onPrimaryAction = updateViewModel::startUpdate,
+            onPrimaryAction = {
+                if (state.apkUrl.isNullOrBlank()) {
+                    updateViewModel.startUpdate()
+                } else if (
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    updateViewModel.startUpdate()
+                }
+            },
             onDismiss = { updateViewModel.dismissUpdate() }
         )
     }
@@ -116,15 +111,36 @@ fun AppNavHost(navController: NavHostController) {
         }
 
         composable(Screen.Settings.route) {
+            val activeDownload = updateState as? UpdateState.Downloading
             val isUpdateActionRunning =
-                updateState == UpdateState.Checking || updateState is UpdateState.Downloading
+                updateState == UpdateState.Checking || activeDownload != null
             val updateActionLabel = when (updateState) {
-                is UpdateState.Downloading -> "Downloading update..."
+                is UpdateState.Downloading -> {
+                    val progressPercent = activeDownload?.progressPercent
+                    if (progressPercent != null) {
+                        "Downloading update... $progressPercent%"
+                    } else {
+                        "Downloading update..."
+                    }
+                }
+
                 else -> "Checking for updates..."
             }
             val updateCheckMessage = when (val s = updateState) {
                 is UpdateState.Checking -> "Checking for updates..."
-                is UpdateState.Downloading -> "Downloading version ${s.version}..."
+                is UpdateState.Downloading -> {
+                    val progressPercent = s.progressPercent
+                    if (progressPercent != null) {
+                        "Downloading version ${s.version} in the background... $progressPercent%"
+                    } else {
+                        "Downloading version ${s.version} in the background..."
+                    }
+                }
+
+                is UpdateState.Downloaded -> {
+                    "Version ${s.version} downloaded. Tap the notification to install."
+                }
+
                 is UpdateState.UpToDate -> "App is up to date"
                 is UpdateState.Error -> s.message
                 else -> null
@@ -135,6 +151,7 @@ fun AppNavHost(navController: NavHostController) {
                 isUpdateActionRunning = isUpdateActionRunning,
                 updateActionLabel = updateActionLabel,
                 updateCheckMessage = updateCheckMessage,
+                updateProgress = activeDownload?.progressFraction,
                 onEditCatalog = {
                     navController.navigate(Screen.CatalogEditor.route)
                 }
