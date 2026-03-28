@@ -10,6 +10,7 @@ import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
 import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.ReinstallReplacedScriptsUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
 import com.istarvin.skinscriptinstaller.domain.VerifyInstalledScriptsUseCase
@@ -34,6 +35,7 @@ class ScriptListViewModelTest {
     private lateinit var repository: ScriptRepository
     private lateinit var importScriptUseCase: ImportScriptUseCase
     private lateinit var restoreScriptUseCase: RestoreScriptUseCase
+    private lateinit var reinstallReplacedScriptsUseCase: ReinstallReplacedScriptsUseCase
     private lateinit var fetchHeroCatalogUseCase: FetchHeroCatalogUseCase
     private lateinit var verifyInstalledScriptsUseCase: VerifyInstalledScriptsUseCase
     private lateinit var activeUserStore: ActiveUserStore
@@ -53,6 +55,7 @@ class ScriptListViewModelTest {
         repository = mockk(relaxed = true)
         importScriptUseCase = mockk(relaxed = true)
         restoreScriptUseCase = mockk(relaxed = true)
+        reinstallReplacedScriptsUseCase = mockk(relaxed = true)
         fetchHeroCatalogUseCase = mockk(relaxed = true)
         verifyInstalledScriptsUseCase = mockk(relaxed = true)
         activeUserStore = mockk(relaxed = true)
@@ -78,6 +81,7 @@ class ScriptListViewModelTest {
             repository,
             importScriptUseCase,
             restoreScriptUseCase,
+            reinstallReplacedScriptsUseCase,
             userSelectionManager,
             fetchHeroCatalogUseCase,
             verifyInstalledScriptsUseCase

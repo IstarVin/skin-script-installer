@@ -10,6 +10,8 @@ import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.ReinstallReplacedScriptsResult
+import com.istarvin.skinscriptinstaller.domain.ReinstallReplacedScriptsUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
 import com.istarvin.skinscriptinstaller.domain.VerifyInstalledScriptsUseCase
@@ -105,6 +107,7 @@ class ScriptListViewModel @Inject constructor(
     private val repository: ScriptRepository,
     private val importScriptUseCase: ImportScriptUseCase,
     private val restoreScriptUseCase: RestoreScriptUseCase,
+    private val reinstallReplacedScriptsUseCase: ReinstallReplacedScriptsUseCase,
     private val userSelectionManager: UserSelectionManager,
     private val fetchHeroCatalogUseCase: FetchHeroCatalogUseCase,
     private val verifyInstalledScriptsUseCase: VerifyInstalledScriptsUseCase
@@ -158,6 +161,12 @@ class ScriptListViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val replacedScriptsCount: StateFlow<Int> = scriptsWithStatus
+        .map { items ->
+            items.count { it.status == InstallationStatus.REPLACED }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
     val heroScriptGroups: StateFlow<List<HeroScriptGroup>> = scriptsWithStatus
         .map(::buildHeroScriptGroups)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -204,6 +213,32 @@ class ScriptListViewModel @Inject constructor(
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    private val _isReinstallingReplaced = MutableStateFlow(false)
+    val isReinstallingReplaced: StateFlow<Boolean> = _isReinstallingReplaced.asStateFlow()
+
+    private val _reinstallReplacedMessage = MutableStateFlow<String?>(null)
+    val reinstallReplacedMessage: StateFlow<String?> = _reinstallReplacedMessage.asStateFlow()
+
+    private val canReinstallReplacedBase: StateFlow<Boolean> = combine(
+        replacedScriptsCount,
+        activeUserId,
+        eligibleUserIds,
+        isReinstallingReplaced,
+        isImporting
+    ) { replacedCount, selectedUserId, userIds, isReinstalling, isImporting ->
+        !isReinstalling &&
+            !isImporting &&
+            replacedCount > 0 &&
+            selectedUserId in userIds
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+
+    val canReinstallReplaced: StateFlow<Boolean> = combine(
+        canReinstallReplacedBase,
+        isRefreshing
+    ) { canRunBase, isRefreshing ->
+        canRunBase && !isRefreshing
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private val _zipPasswordPrompt = MutableStateFlow<ZipPasswordPrompt?>(null)
     val zipPasswordPrompt: StateFlow<ZipPasswordPrompt?> = _zipPasswordPrompt.asStateFlow()
@@ -302,6 +337,34 @@ class ScriptListViewModel @Inject constructor(
         }
     }
 
+    fun reinstallAllReplaced() {
+        viewModelScope.launch {
+            if (_isReinstallingReplaced.value) {
+                return@launch
+            }
+
+            val selectedUserId = activeUserId.value
+            if (selectedUserId !in eligibleUserIds.value) {
+                _reinstallReplacedMessage.value =
+                    "No active Mobile Legends user is available for reinstall"
+                return@launch
+            }
+
+            _reinstallReplacedMessage.value = null
+            _isReinstallingReplaced.value = true
+
+            try {
+                userSelectionManager.selectUser(selectedUserId)
+                val result = reinstallReplacedScriptsUseCase.execute(selectedUserId)
+                _reinstallReplacedMessage.value = formatReinstallReplacedMessage(result, selectedUserId)
+            } catch (e: Exception) {
+                _reinstallReplacedMessage.value = e.message ?: "Reinstall failed"
+            } finally {
+                _isReinstallingReplaced.value = false
+            }
+        }
+    }
+
     fun retryZipWithPassword(password: String) {
         val prompt = _zipPasswordPrompt.value ?: return
         importZipInternal(prompt.zipUri, password.toCharArray())
@@ -309,6 +372,10 @@ class ScriptListViewModel @Inject constructor(
 
     fun dismissZipPasswordPrompt() {
         _zipPasswordPrompt.value = null
+    }
+
+    fun clearReinstallReplacedMessage() {
+        _reinstallReplacedMessage.value = null
     }
 
     private fun importZipInternal(zipUri: Uri, password: CharArray?) {
@@ -383,6 +450,24 @@ class ScriptListViewModel @Inject constructor(
 
     fun dismissPendingClassification() {
         _pendingClassificationScriptId.value = null
+    }
+
+    private fun formatReinstallReplacedMessage(
+        result: ReinstallReplacedScriptsResult,
+        userId: Int
+    ): String {
+        if (result.totalCandidates == 0) {
+            return "No replaced scripts to reinstall for User $userId"
+        }
+
+        if (result.failures.isEmpty()) {
+            return "Reinstalled ${result.reinstalledCount} scripts for User $userId"
+        }
+
+        val failureSummary = result.failures.joinToString(separator = "; ") { failure ->
+            "${failure.scriptName} (${failure.message})"
+        }
+        return "Reinstalled ${result.reinstalledCount} of ${result.totalCandidates} scripts for User $userId. Failed: $failureSummary"
     }
 
     private fun buildHeroScriptGroups(items: List<ScriptWithStatus>): List<HeroScriptGroup> {

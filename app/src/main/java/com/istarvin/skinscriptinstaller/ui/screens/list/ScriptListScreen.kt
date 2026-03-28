@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -33,12 +34,15 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,12 +52,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -94,6 +100,10 @@ fun ScriptListScreen(
     val activeUserId by viewModel.activeUserId.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val replacedScriptsCount by viewModel.replacedScriptsCount.collectAsState()
+    val canReinstallReplaced by viewModel.canReinstallReplaced.collectAsState()
+    val isReinstallingReplaced by viewModel.isReinstallingReplaced.collectAsState()
+    val reinstallReplacedMessage by viewModel.reinstallReplacedMessage.collectAsState()
     val importError by viewModel.importError.collectAsState()
     val zipPasswordPrompt by viewModel.zipPasswordPrompt.collectAsState()
     val pendingClassificationScriptId by viewModel.pendingClassificationScriptId.collectAsState()
@@ -128,6 +138,13 @@ fun ScriptListScreen(
         importError?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearImportError()
+        }
+    }
+
+    LaunchedEffect(reinstallReplacedMessage) {
+        reinstallReplacedMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearReinstallReplacedMessage()
         }
     }
 
@@ -227,6 +244,22 @@ fun ScriptListScreen(
                     HeroSearchField(
                         query = searchQuery,
                         onQueryChange = viewModel::updateSearchQuery,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = AppDimens.ScreenHorizontal,
+                                vertical = AppDimens.SpaceSm
+                            )
+                    )
+                }
+
+                if (replacedScriptsCount > 0 || isReinstallingReplaced) {
+                    ReinstallReplacedScriptsAction(
+                        activeUserId = activeUserId,
+                        replacedCount = replacedScriptsCount,
+                        enabled = canReinstallReplaced,
+                        isReinstalling = isReinstallingReplaced,
+                        onConfirmReinstallAll = viewModel::reinstallAllReplaced,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(
@@ -402,6 +435,146 @@ private fun ActiveUserSelector(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ReinstallReplacedScriptsAction(
+    activeUserId: Int,
+    replacedCount: Int,
+    enabled: Boolean,
+    isReinstalling: Boolean,
+    onConfirmReinstallAll: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var showConfirmationDialog by remember { mutableStateOf(false) }
+    val userName = userLabel(activeUserId)
+    val scriptWord = if (replacedCount == 1) "script" else "scripts"
+
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.error.copy(alpha = AppAlpha.ChipContainer)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
+    ) {
+        Column(
+            modifier = Modifier.padding(AppDimens.SpaceLg),
+            verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceMd)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AppDimens.SpaceMd),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.errorContainer
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier
+                            .padding(AppDimens.SpaceSm)
+                            .size(AppDimens.IconSmall)
+                    )
+                }
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Reinstall Needed",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
+                    Text(
+                        text = "$replacedCount replaced $scriptWord in $userName",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.SecondaryText)
+                    )
+                }
+
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.errorContainer
+                ) {
+                    Text(
+                        text = replacedCount.toString(),
+                        modifier = Modifier.padding(
+                            horizontal = AppDimens.SpaceMd,
+                            vertical = AppDimens.SpaceSm
+                        ),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+
+            Button(
+                onClick = { showConfirmationDialog = true },
+                enabled = enabled,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            ) {
+                if (isReinstalling) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(AppDimens.IconTiny),
+                        strokeWidth = AppDimens.Space2,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        modifier = Modifier.size(AppDimens.IconSmall)
+                    )
+                }
+                Spacer(modifier = Modifier.width(AppDimens.SpaceSm))
+                Text(if (isReinstalling) "Reinstalling Scripts..." else "Reinstall Replaced Scripts")
+            }
+
+            Text(
+                text = "Repairs scripts that Mobile Legends has replaced.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.SecondaryText)
+            )
+        }
+    }
+
+    if (showConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmationDialog = false },
+            title = { Text("Reinstall Replaced Scripts") },
+            text = {
+                Text(
+                    "Reinstall $replacedCount replaced scripts for $userName? " +
+                        "Each script will be restored first, then installed again."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showConfirmationDialog = false
+                        onConfirmReinstallAll()
+                    }
+                ) {
+                    Text("Confirm Reinstall")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirmationDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
