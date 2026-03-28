@@ -5,6 +5,7 @@ import android.os.ParcelFileDescriptor
 import com.istarvin.skinscriptinstaller.IFileService
 import com.istarvin.skinscriptinstaller.data.db.entity.InstalledFile
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
+import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
 import io.mockk.*
@@ -49,6 +50,8 @@ class RestoreScriptUseCaseTest {
         mockkStatic(ParcelFileDescriptor::class)
         val mockPfd = mockk<ParcelFileDescriptor>(relaxed = true)
         every { ParcelFileDescriptor.open(any(), any()) } returns mockPfd
+
+        coEvery { repository.getSupersedingInstallationIds(any()) } returns emptySet()
 
         useCase = RestoreScriptUseCase(context, repository, shizukuManager)
     }
@@ -95,12 +98,12 @@ class RestoreScriptUseCaseTest {
     fun `execute returns failure when no installed files`() = runTest {
         val installation = createInstallation()
         coEvery { repository.getInstallationById(1L) } returns installation
-        coEvery { repository.getInstalledFilesByInstallation(1L) } returns emptyList()
+        coEvery { repository.getActiveInstalledFilesByInstallation(1L) } returns emptyList()
 
         val result = useCase.execute(1L)
 
         assertTrue(result.isFailure)
-        assertEquals("No installed files to restore", result.exceptionOrNull()?.message)
+        assertEquals("No active installed files to restore", result.exceptionOrNull()?.message)
     }
 
     @Test
@@ -113,7 +116,7 @@ class RestoreScriptUseCaseTest {
             wasOverwrite = false
         )
         coEvery { repository.getInstallationById(1L) } returns installation
-        coEvery { repository.getInstalledFilesByInstallation(1L) } returns listOf(mismatchedFile)
+        coEvery { repository.getActiveInstalledFilesByInstallation(1L) } returns listOf(mismatchedFile)
 
         val result = useCase.execute(1L)
 
@@ -131,7 +134,7 @@ class RestoreScriptUseCaseTest {
             wasOverwrite = false
         )
         coEvery { repository.getInstallationById(1L) } returns installation
-        coEvery { repository.getInstalledFilesByInstallation(1L) } returns listOf(newFile)
+        coEvery { repository.getActiveInstalledFilesByInstallation(1L) } returns listOf(newFile)
         every { fileService.deleteFile(any()) } returns true
 
         val result = useCase.execute(1L)
@@ -156,7 +159,7 @@ class RestoreScriptUseCaseTest {
             backupPath = backupFile.absolutePath
         )
         coEvery { repository.getInstallationById(1L) } returns installation
-        coEvery { repository.getInstalledFilesByInstallation(1L) } returns listOf(overwrittenFile)
+        coEvery { repository.getActiveInstalledFilesByInstallation(1L) } returns listOf(overwrittenFile)
         every { fileService.writeFile(any(), any()) } returns true
 
         val result = useCase.execute(1L)
@@ -171,15 +174,16 @@ class RestoreScriptUseCaseTest {
         val installation = createInstallation()
         val file = createInstalledFile()
         coEvery { repository.getInstallationById(1L) } returns installation
-        coEvery { repository.getInstalledFilesByInstallation(1L) } returns listOf(file)
+        coEvery { repository.getActiveInstalledFilesByInstallation(1L) } returns listOf(file)
         every { fileService.deleteFile(any()) } returns true
+        coEvery { repository.reactivateInstalledFilesSupersededBy(1L) } returns emptySet()
 
         val result = useCase.execute(1L)
 
         assertTrue(result.isSuccess)
         coVerify {
             repository.updateInstallation(match {
-                it.status == "restored" && it.restoredAt != null
+                it.status == InstallationStatus.RESTORED && it.restoredAt != null
             })
         }
     }
@@ -193,8 +197,9 @@ class RestoreScriptUseCaseTest {
 
         val file = createInstalledFile()
         coEvery { repository.getInstallationById(1L) } returns installation
-        coEvery { repository.getInstalledFilesByInstallation(1L) } returns listOf(file)
+        coEvery { repository.getActiveInstalledFilesByInstallation(1L) } returns listOf(file)
         every { fileService.deleteFile(any()) } returns true
+        coEvery { repository.reactivateInstalledFilesSupersededBy(1L) } returns emptySet()
 
         val result = useCase.execute(1L)
 
@@ -210,8 +215,9 @@ class RestoreScriptUseCaseTest {
             createInstalledFile(id = 2L, fileName = "file2.png")
         )
         coEvery { repository.getInstallationById(1L) } returns installation
-        coEvery { repository.getInstalledFilesByInstallation(1L) } returns files
+        coEvery { repository.getActiveInstalledFilesByInstallation(1L) } returns files
         every { fileService.deleteFile(any()) } returns true
+        coEvery { repository.reactivateInstalledFilesSupersededBy(1L) } returns emptySet()
 
         val result = useCase.execute(1L)
 
@@ -238,13 +244,85 @@ class RestoreScriptUseCaseTest {
         assertNull(useCase.progress.value)
     }
 
+    @Test
+    fun `execute reactivates superseded installations after restore`() = runTest {
+        val installation = createInstallation()
+        val file = createInstalledFile()
+        val supersededInstallation = createInstallation(id = 2L, scriptId = 2L, status = InstallationStatus.SUPERSEDED)
+        coEvery { repository.getInstallationById(1L) } returns installation
+        coEvery { repository.getActiveInstalledFilesByInstallation(1L) } returns listOf(file)
+        every { fileService.deleteFile(any()) } returns true
+        coEvery { repository.reactivateInstalledFilesSupersededBy(1L) } returns setOf(2L)
+        coEvery { repository.getInstallationById(2L) } returns supersededInstallation
+        coEvery { repository.countActiveInstalledFiles(2L) } returns 1
+
+        val result = useCase.execute(1L)
+
+        assertTrue(result.isSuccess)
+        coVerify {
+            repository.updateInstallation(match {
+                it.id == 2L && it.status == InstallationStatus.INSTALLED
+            })
+        }
+    }
+
+    @Test
+    fun `execute restores superseding installation chain before requested installation`() = runTest {
+        val requestedInstallation = createInstallation(id = 1L, scriptId = 1L, status = InstallationStatus.INSTALLED)
+        val supersedingInstallation = createInstallation(id = 2L, scriptId = 2L, status = InstallationStatus.INSTALLED)
+
+        val requestedFile = createInstalledFile(id = 11L, installationId = 1L, fileName = "requested.png")
+        val supersedingFile = createInstalledFile(id = 22L, installationId = 2L, fileName = "superseding.png")
+
+        coEvery { repository.getInstallationById(1L) } returns requestedInstallation
+        coEvery { repository.getInstallationById(2L) } returns supersedingInstallation
+        coEvery { repository.getSupersedingInstallationIds(1L) } returns setOf(2L)
+        coEvery { repository.getSupersedingInstallationIds(2L) } returns emptySet()
+        coEvery { repository.getActiveInstalledFilesByInstallation(2L) } returns listOf(supersedingFile)
+        coEvery { repository.getActiveInstalledFilesByInstallation(1L) } returns listOf(requestedFile)
+        every { fileService.deleteFile(any()) } returns true
+        coEvery { repository.reactivateInstalledFilesSupersededBy(2L) } returns emptySet()
+        coEvery { repository.reactivateInstalledFilesSupersededBy(1L) } returns emptySet()
+
+        val result = useCase.execute(1L)
+
+        assertTrue(result.isSuccess)
+        coVerify(ordering = Ordering.ORDERED) {
+            repository.updateInstallation(match {
+                it.id == 2L && it.status == InstallationStatus.RESTORED
+            })
+            repository.updateInstallation(match {
+                it.id == 1L && it.status == InstallationStatus.RESTORED
+            })
+        }
+    }
+
+    @Test
+    fun `execute fails when supersede chain is cyclic`() = runTest {
+        val installation1 = createInstallation(id = 1L)
+        val installation2 = createInstallation(id = 2L, scriptId = 2L)
+
+        coEvery { repository.getInstallationById(1L) } returns installation1
+        coEvery { repository.getInstallationById(2L) } returns installation2
+        coEvery { repository.getSupersedingInstallationIds(1L) } returns setOf(2L)
+        coEvery { repository.getSupersedingInstallationIds(2L) } returns setOf(1L)
+
+        val result = useCase.execute(1L)
+
+        assertTrue(result.isFailure)
+        assertEquals(
+            "Restore aborted: cyclic supersede chain detected",
+            result.exceptionOrNull()?.message
+        )
+    }
+
     // --- Helpers ---
 
     private fun createInstallation(
         id: Long = 1L,
         scriptId: Long = 1L,
         userId: Int = 0,
-        status: String = "installed"
+        status: String = InstallationStatus.INSTALLED
     ) = Installation(
         id = id,
         scriptId = scriptId,

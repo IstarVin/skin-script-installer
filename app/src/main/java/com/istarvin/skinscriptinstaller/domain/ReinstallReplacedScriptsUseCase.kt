@@ -55,6 +55,36 @@ class ReinstallReplacedScriptsUseCase @Inject constructor(
                 return@forEach
             }
 
+            val installPlan = buildScriptInstallPlan(script.storagePath, userId)
+                .getOrElse { error ->
+                    failures += ReinstallReplacedScriptsFailure(
+                        scriptId = installation.scriptId,
+                        scriptName = scriptName,
+                        message = error.message ?: "Unable to prepare install"
+                    )
+                    return@forEach
+                }
+
+            val fileConflicts = repository.getActiveFileOwnershipConflicts(
+                destPaths = installPlan.files.map { file -> file.destPath },
+                userId = userId,
+                excludeScriptId = script.id,
+                excludeInstallationIds = setOf(installation.id)
+            )
+            if (fileConflicts.isNotEmpty()) {
+                val conflictingScriptNames = fileConflicts
+                    .map { conflict -> conflict.scriptName }
+                    .distinct()
+                    .sorted()
+                    .joinToString(", ")
+                failures += ReinstallReplacedScriptsFailure(
+                    scriptId = installation.scriptId,
+                    scriptName = scriptName,
+                    message = "File conflicts with installed scripts: $conflictingScriptNames"
+                )
+                return@forEach
+            }
+
             val restoreResult = restoreScriptUseCase.execute(installation.id)
             if (restoreResult.isFailure) {
                 failures += ReinstallReplacedScriptsFailure(

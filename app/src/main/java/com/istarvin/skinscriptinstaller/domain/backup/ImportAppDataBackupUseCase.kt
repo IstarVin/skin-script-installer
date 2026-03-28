@@ -105,7 +105,8 @@ class ImportAppDataBackupUseCase @Inject constructor(
                     destPath = installedFile.destPath,
                     wasOverwrite = installedFile.wasOverwrite,
                     backupPath = installedFile.backupRelativePath
-                        ?.let { File(context.filesDir, it).absolutePath }
+                        ?.let { File(context.filesDir, it).absolutePath },
+                    supersededByInstallationId = installedFile.supersededByInstallationId
                 )
             }
 

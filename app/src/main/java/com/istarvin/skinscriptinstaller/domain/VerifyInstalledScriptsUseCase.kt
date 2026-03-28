@@ -87,13 +87,13 @@ class VerifyInstalledScriptsUseCase @Inject constructor(
         installation: Installation,
         service: IFileService
     ): String {
+        val installedFiles = repository.getActiveInstalledFilesByInstallation(installation.id)
+        if (installedFiles.isEmpty()) {
+            return InstallationStatus.SUPERSEDED
+        }
+
         val script = repository.getScriptById(installation.scriptId)
             ?: return InstallationStatus.REPLACED
-
-        val installedFiles = repository.getInstalledFilesByInstallation(installation.id)
-        if (installedFiles.isEmpty()) {
-            return InstallationStatus.REPLACED
-        }
 
         val assetsDir = resolveImportedAssetsDir(script.storagePath)
         val hasMismatch = installedFiles.any { installedFile ->

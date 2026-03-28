@@ -2,6 +2,8 @@ package com.istarvin.skinscriptinstaller.domain
 
 import android.content.Context
 import android.os.ParcelFileDescriptor
+import com.istarvin.skinscriptinstaller.IFileService
+import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -28,25 +30,77 @@ class RestoreScriptUseCase @Inject constructor(
 
     suspend fun execute(installationId: Long): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val installation = repository.getInstallationById(installationId)
-                ?: return@withContext Result.failure(Exception("Installation not found"))
-
-            if (installation.status == "restored") {
-                return@withContext Result.failure(Exception("Installation already restored"))
-            }
-
             val service = shizukuManager.fileService.value
                 ?: return@withContext Result.failure(Exception("Shizuku file service not available"))
 
-            val installedFiles = repository.getInstalledFilesByInstallation(installationId)
+            val result = restoreInstallationRecursive(
+                installationId = installationId,
+                service = service,
+                failIfAlreadyRestored = true,
+                inProgress = mutableSetOf(),
+                restored = mutableSetOf()
+            )
+            if (result.isFailure) {
+                _progress.value = null
+            }
+            result
+        } catch (e: Exception) {
+            _progress.value = null
+            Result.failure(e)
+        }
+    }
 
+    private suspend fun restoreInstallationRecursive(
+        installationId: Long,
+        service: IFileService,
+        failIfAlreadyRestored: Boolean,
+        inProgress: MutableSet<Long>,
+        restored: MutableSet<Long>
+    ): Result<Unit> {
+        if (installationId in restored) {
+            return Result.success(Unit)
+        }
+
+        if (!inProgress.add(installationId)) {
+            return Result.failure(Exception("Restore aborted: cyclic supersede chain detected"))
+        }
+
+        try {
+            val installation = repository.getInstallationById(installationId)
+                ?: return Result.failure(Exception("Installation not found"))
+
+            if (installation.status == InstallationStatus.RESTORED) {
+                return if (failIfAlreadyRestored) {
+                    Result.failure(Exception("Installation already restored"))
+                } else {
+                    restored += installationId
+                    Result.success(Unit)
+                }
+            }
+
+            // If this installation has been superseded, unwind newer owners first.
+            val supersedingInstallationIds = repository.getSupersedingInstallationIds(installationId)
+            for (supersedingInstallationId in supersedingInstallationIds) {
+                val dependencyResult = restoreInstallationRecursive(
+                    installationId = supersedingInstallationId,
+                    service = service,
+                    failIfAlreadyRestored = false,
+                    inProgress = inProgress,
+                    restored = restored
+                )
+                if (dependencyResult.isFailure) {
+                    return dependencyResult
+                }
+            }
+
+            val installedFiles = repository.getActiveInstalledFilesByInstallation(installationId)
             if (installedFiles.isEmpty()) {
-                return@withContext Result.failure(Exception("No installed files to restore"))
+                return Result.failure(Exception("No active installed files to restore"))
             }
 
             installedFiles.forEach { file ->
                 if (!file.destPath.belongsToUser(installation.userId)) {
-                    return@withContext Result.failure(
+                    return Result.failure(
                         Exception("Restore aborted: installation contains mismatched user file path")
                     )
                 }
@@ -77,13 +131,27 @@ class RestoreScriptUseCase @Inject constructor(
                 }
             }
 
-            // Update installation status
             repository.updateInstallation(
                 installation.copy(
-                    status = "restored",
+                    status = InstallationStatus.RESTORED,
                     restoredAt = System.currentTimeMillis()
                 )
             )
+
+            val reactivatedInstallationIds = repository.reactivateInstalledFilesSupersededBy(installationId)
+            reactivatedInstallationIds.forEach { reactivatedInstallationId ->
+                val reactivatedInstallation = repository.getInstallationById(reactivatedInstallationId)
+                    ?: return@forEach
+                val activeFileCount = repository.countActiveInstalledFiles(reactivatedInstallationId)
+                if (
+                    activeFileCount > 0 &&
+                    reactivatedInstallation.status == InstallationStatus.SUPERSEDED
+                ) {
+                    repository.updateInstallation(
+                        reactivatedInstallation.copy(status = InstallationStatus.INSTALLED)
+                    )
+                }
+            }
 
             // Clean up the backup directory for this installation
             val backupDir = File(context.filesDir, "backups/$installationId")
@@ -98,10 +166,10 @@ class RestoreScriptUseCase @Inject constructor(
                 isComplete = true
             )
 
-            Result.success(Unit)
-        } catch (e: Exception) {
-            _progress.value = null
-            Result.failure(e)
+            restored += installationId
+            return Result.success(Unit)
+        } finally {
+            inProgress.remove(installationId)
         }
     }
 

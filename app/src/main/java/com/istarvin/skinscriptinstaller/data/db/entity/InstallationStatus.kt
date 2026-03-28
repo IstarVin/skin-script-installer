@@ -5,4 +5,5 @@ object InstallationStatus {
     const val INSTALLED = "installed"
     const val REPLACED = "replaced"
     const val RESTORED = "restored"
+    const val SUPERSEDED = "superseded"
 }

@@ -80,7 +80,8 @@ class ExportAppDataBackupUseCase @Inject constructor(
                         destPath = installedFile.destPath,
                         wasOverwrite = installedFile.wasOverwrite,
                         backupRelativePath = installedFile.backupPath
-                            ?.let { toRelativePathOrNull(it, filesDir) }
+                            ?.let { toRelativePathOrNull(it, filesDir) },
+                        supersededByInstallationId = installedFile.supersededByInstallationId
                     )
                 },
                 heroes = heroes.map { hero ->

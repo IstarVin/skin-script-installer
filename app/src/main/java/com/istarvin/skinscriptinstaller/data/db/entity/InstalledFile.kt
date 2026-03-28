@@ -15,7 +15,11 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("installationId")]
+    indices = [
+        Index("installationId"),
+        Index("destPath"),
+        Index("supersededByInstallationId")
+    ]
 )
 data class InstalledFile(
     @PrimaryKey(autoGenerate = true)
@@ -23,6 +27,7 @@ data class InstalledFile(
     val installationId: Long,
     val destPath: String, // absolute ML path on device
     val wasOverwrite: Boolean,
-    val backupPath: String? = null // filesDir/backups/<installationId>/<relPath>
+    val backupPath: String? = null, // filesDir/backups/<installationId>/<relPath>
+    val supersededByInstallationId: Long? = null
 )
 

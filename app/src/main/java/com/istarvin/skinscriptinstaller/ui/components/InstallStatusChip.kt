@@ -21,6 +21,7 @@ fun InstallStatusChip(
         InstallationStatus.INSTALLED -> "Installed" to MaterialTheme.colorScheme.primary
         InstallationStatus.REPLACED -> "Replaced" to MaterialTheme.colorScheme.error
         InstallationStatus.RESTORED -> "Restored" to MaterialTheme.colorScheme.tertiary
+        InstallationStatus.SUPERSEDED -> "Superseded" to MaterialTheme.colorScheme.secondary
         else -> "Not Installed" to MaterialTheme.colorScheme.outline
     }
 

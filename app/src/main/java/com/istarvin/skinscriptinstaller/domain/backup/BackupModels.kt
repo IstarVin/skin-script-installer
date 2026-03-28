@@ -37,7 +37,8 @@ data class InstalledFileBackupRecord(
     val installationId: Long,
     val destPath: String,
     val wasOverwrite: Boolean,
-    val backupRelativePath: String?
+    val backupRelativePath: String?,
+    val supersededByInstallationId: Long? = null
 )
 
 data class HeroBackupRecord(

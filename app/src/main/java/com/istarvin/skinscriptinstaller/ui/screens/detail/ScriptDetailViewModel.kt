@@ -12,12 +12,15 @@ import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.domain.ClassifyScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.FileConflictChoice
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.InstallProgress
 import com.istarvin.skinscriptinstaller.domain.InstallScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
 import com.istarvin.skinscriptinstaller.domain.VerifyInstalledScriptsUseCase
+import com.istarvin.skinscriptinstaller.domain.buildScriptInstallPlan
+import com.istarvin.skinscriptinstaller.domain.installedFileRelativePath
 import com.istarvin.skinscriptinstaller.service.InvalidPasswordException
 import com.istarvin.skinscriptinstaller.service.PasswordRequiredException
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
@@ -53,6 +56,21 @@ data class InstallConflictWarningState(
     val targetScriptName: String,
     val targetUserId: Int,
     val conflicts: List<HeroInstallationConflict>
+)
+
+data class FileConflictWarningItem(
+    val destPath: String,
+    val relativePath: String,
+    val conflictingInstallationId: Long,
+    val conflictingScriptName: String
+)
+
+data class FileConflictWarningState(
+    val targetScriptName: String,
+    val targetUserId: Int,
+    val installationIdsToRestore: List<Long>,
+    val conflicts: List<FileConflictWarningItem>,
+    val selections: Map<String, FileConflictChoice>
 )
 
 @HiltViewModel
@@ -102,6 +120,10 @@ class ScriptDetailViewModel @Inject constructor(
     private val _installConflictWarning = MutableStateFlow<InstallConflictWarningState?>(null)
     val installConflictWarning: StateFlow<InstallConflictWarningState?> =
         _installConflictWarning.asStateFlow()
+
+    private val _fileConflictWarning = MutableStateFlow<FileConflictWarningState?>(null)
+    val fileConflictWarning: StateFlow<FileConflictWarningState?> =
+        _fileConflictWarning.asStateFlow()
 
     // Classification state
     private val _heroName = MutableStateFlow<String?>(null)
@@ -342,7 +364,7 @@ class ScriptDetailViewModel @Inject constructor(
                 return@launch
             }
 
-            executeInstallFlow(targetUserId)
+            prepareFileConflictStep(targetUserId)
         }
     }
 
@@ -354,16 +376,86 @@ class ScriptDetailViewModel @Inject constructor(
         val warning = _installConflictWarning.value ?: return
         _installConflictWarning.value = null
         viewModelScope.launch {
-            executeInstallFlow(
+            prepareFileConflictStep(
                 targetUserId = warning.targetUserId,
-                conflictsToRestore = warning.conflicts
+                installationIdsToRestore = warning.conflicts.map { conflict -> conflict.installationId }
             )
         }
     }
 
+    fun dismissFileConflictWarning() {
+        _fileConflictWarning.value = null
+    }
+
+    fun updateFileConflictChoice(destPath: String, choice: FileConflictChoice) {
+        val warning = _fileConflictWarning.value ?: return
+        _fileConflictWarning.value = warning.copy(
+            selections = warning.selections + (destPath to choice)
+        )
+    }
+
+    fun confirmFileConflictWarning() {
+        val warning = _fileConflictWarning.value ?: return
+        _fileConflictWarning.value = null
+        viewModelScope.launch {
+            executeInstallFlow(
+                targetUserId = warning.targetUserId,
+                installationIdsToRestore = warning.installationIdsToRestore,
+                fileConflictChoices = warning.selections
+            )
+        }
+    }
+
+    private suspend fun prepareFileConflictStep(
+        targetUserId: Int,
+        installationIdsToRestore: List<Long> = emptyList()
+    ) {
+        val currentScript = requireClassifiedScript() ?: return
+        val installPlan = buildScriptInstallPlan(currentScript.storagePath, targetUserId)
+            .getOrElse { error ->
+                _error.value = error.message ?: "Install failed"
+                return
+            }
+
+        val fileConflicts = repository.getActiveFileOwnershipConflicts(
+            destPaths = installPlan.files.map { file -> file.destPath },
+            userId = targetUserId,
+            excludeScriptId = currentScript.id,
+            excludeInstallationIds = installationIdsToRestore.toSet()
+        )
+
+        if (fileConflicts.isEmpty()) {
+            executeInstallFlow(targetUserId, installationIdsToRestore)
+            return
+        }
+
+        val relativePathByDestPath = installPlan.files.associate { file ->
+            file.destPath to file.relativePath
+        }
+        val warningItems = fileConflicts.map { conflict ->
+            FileConflictWarningItem(
+                destPath = conflict.destPath,
+                relativePath = relativePathByDestPath[conflict.destPath]
+                    ?: installedFileRelativePath(targetUserId, conflict.destPath)
+                    ?: conflict.destPath.substringAfterLast('/'),
+                conflictingInstallationId = conflict.installationId,
+                conflictingScriptName = conflict.scriptName
+            )
+        }
+
+        _fileConflictWarning.value = FileConflictWarningState(
+            targetScriptName = currentScript.name,
+            targetUserId = targetUserId,
+            installationIdsToRestore = installationIdsToRestore.distinct(),
+            conflicts = warningItems,
+            selections = warningItems.associate { item -> item.destPath to FileConflictChoice.USE_NEW }
+        )
+    }
+
     private suspend fun executeInstallFlow(
         targetUserId: Int,
-        conflictsToRestore: List<HeroInstallationConflict> = emptyList()
+        installationIdsToRestore: List<Long> = emptyList(),
+        fileConflictChoices: Map<String, FileConflictChoice> = emptyMap()
     ) {
         val currentScript = requireClassifiedScript() ?: return
 
@@ -379,8 +471,8 @@ class ScriptDetailViewModel @Inject constructor(
         restoreScriptUseCase.resetProgress()
         installScriptUseCase.resetProgress()
 
-        for (conflict in conflictsToRestore) {
-            val restoreResult = restoreScriptUseCase.execute(conflict.installationId)
+        for (installationId in installationIdsToRestore.distinct()) {
+            val restoreResult = restoreScriptUseCase.execute(installationId)
             if (restoreResult.isFailure) {
                 _error.value = restoreResult.exceptionOrNull()?.message
                     ?: "Install failed during restore"
@@ -390,7 +482,11 @@ class ScriptDetailViewModel @Inject constructor(
             }
         }
 
-        val result = installScriptUseCase.execute(currentScript.id, targetUserId)
+        val result = installScriptUseCase.execute(
+            currentScript.id,
+            targetUserId,
+            fileConflictChoices
+        )
         result.onSuccess {
             _installation.value = it
         }.onFailure { e ->
@@ -457,27 +553,11 @@ class ScriptDetailViewModel @Inject constructor(
             }
 
             userSelectionManager.selectUser(targetUserId)
-
-            _isOperating.value = true
             _error.value = null
-            restoreScriptUseCase.resetProgress()
-            installScriptUseCase.resetProgress()
-
-            val restoreResult = restoreScriptUseCase.execute(inst.id)
-            if (restoreResult.isFailure) {
-                _error.value = restoreResult.exceptionOrNull()?.message ?: "Reinstall failed during restore"
-                _isOperating.value = false
-                return@launch
-            }
-
-            val installResult = installScriptUseCase.execute(scriptId, targetUserId)
-            installResult.onSuccess {
-                _installation.value = it
-            }.onFailure { e ->
-                _error.value = e.message ?: "Reinstall failed during install"
-            }
-
-            _isOperating.value = false
+            prepareFileConflictStep(
+                targetUserId = targetUserId,
+                installationIdsToRestore = listOf(inst.id)
+            )
         }
     }
 

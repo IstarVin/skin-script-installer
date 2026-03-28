@@ -62,4 +62,31 @@ class BackupJsonCodecTest {
 
         assertNull(decoded.heroes.single().heroIcon)
     }
+
+      @Test
+      fun `encode and decode preserves superseded installation id for installed files`() {
+        val manifest = AppBackupManifest(
+          formatVersion = 2,
+          exportedAt = 1_700_000_000_000,
+          appVersionCode = 10,
+          appVersionName = "1.0.10",
+          databaseVersion = 5,
+          scripts = emptyList(),
+          installations = emptyList(),
+          installedFiles = listOf(
+            InstalledFileBackupRecord(
+              id = 5L,
+              installationId = 2L,
+              destPath = "/storage/emulated/0/Android/data/com.mobile.legends/files/dragon2017/assets/Art/test.png",
+              wasOverwrite = true,
+              backupRelativePath = "backups/2/Art/test.png",
+              supersededByInstallationId = 9L
+            )
+          )
+        )
+
+        val decoded = BackupJsonCodec.decode(BackupJsonCodec.encode(manifest))
+
+        assertEquals(9L, decoded.installedFiles.single().supersededByInstallationId)
+      }
 }

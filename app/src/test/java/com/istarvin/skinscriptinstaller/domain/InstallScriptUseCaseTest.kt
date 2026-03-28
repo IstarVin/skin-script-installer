@@ -3,6 +3,7 @@ package com.istarvin.skinscriptinstaller.domain
 import android.content.Context
 import android.os.ParcelFileDescriptor
 import com.istarvin.skinscriptinstaller.IFileService
+import com.istarvin.skinscriptinstaller.data.db.query.FileOwnershipConflict
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
@@ -120,6 +121,7 @@ class InstallScriptUseCaseTest {
         every { fileService.exists(any()) } returns false
         every { fileService.mkdirs(any()) } returns true
         every { fileService.writeFile(any(), any()) } returns true
+        coEvery { repository.getActiveFileOwnershipConflicts(any(), any(), any(), any()) } returns emptyList()
 
         val result = useCase.execute(1L, userId = 0)
 
@@ -145,6 +147,7 @@ class InstallScriptUseCaseTest {
         every { fileService.exists(any()) } returns false
         every { fileService.mkdirs(any()) } returns true
         every { fileService.writeFile(any(), any()) } returns true
+        coEvery { repository.getActiveFileOwnershipConflicts(any(), any(), any(), any()) } returns emptyList()
 
         val result = useCase.execute(1L)
 
@@ -160,6 +163,7 @@ class InstallScriptUseCaseTest {
         every { fileService.exists(any()) } returns true
         every { fileService.mkdirs(any()) } returns true
         every { fileService.writeFile(any(), any()) } returns true
+        coEvery { repository.getActiveFileOwnershipConflicts(any(), any(), any(), any()) } returns emptyList()
 
         // Create a real file to serve as backup source — provides a valid FileDescriptor
         // for ParcelFileDescriptor.AutoCloseInputStream(pfd)
@@ -191,6 +195,7 @@ class InstallScriptUseCaseTest {
         every { fileService.exists(any()) } returns false
         every { fileService.mkdirs(any()) } returns true
         every { fileService.writeFile(any(), any()) } returns true
+        coEvery { repository.getActiveFileOwnershipConflicts(any(), any(), any(), any()) } returns emptyList()
 
         val result = useCase.execute(1L)
 
@@ -211,6 +216,7 @@ class InstallScriptUseCaseTest {
         every { fileService.exists(any()) } returns false
         every { fileService.mkdirs(any()) } returns true
         every { fileService.writeFile(any(), any()) } returns true
+        coEvery { repository.getActiveFileOwnershipConflicts(any(), any(), any(), any()) } returns emptyList()
 
         useCase.execute(1L, userId = 0)
 
@@ -229,6 +235,7 @@ class InstallScriptUseCaseTest {
         every { fileService.exists(any()) } returns false
         every { fileService.mkdirs(any()) } returns true
         every { fileService.writeFile(any(), any()) } returns true
+        coEvery { repository.getActiveFileOwnershipConflicts(any(), any(), any(), any()) } returns emptyList()
 
         useCase.execute(1L, userId = 10)
 
@@ -250,6 +257,7 @@ class InstallScriptUseCaseTest {
         every { fileService.exists(any()) } returns false
         every { fileService.mkdirs(any()) } returns true
         every { fileService.writeFile(any(), any()) } returns true
+        coEvery { repository.getActiveFileOwnershipConflicts(any(), any(), any(), any()) } returns emptyList()
 
         val result = useCase.execute(1L)
 
@@ -275,6 +283,97 @@ class InstallScriptUseCaseTest {
     fun `resetProgress clears progress state`() {
         useCase.resetProgress()
         assertNull(useCase.progress.value)
+    }
+
+    @Test
+    fun `execute skips conflicting files when keep current is selected`() = runTest {
+        val script = createScriptWithAssets(
+            "Art/conflict.png" to "new data",
+            "Art/fresh.png" to "fresh data"
+        )
+        val conflictPath = "${buildMlAssetsRoot(0)}/Art/conflict.png"
+        val freshPath = "${buildMlAssetsRoot(0)}/Art/fresh.png"
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery { repository.insertInstallation(any()) } returns 100L
+        coEvery {
+            repository.getActiveFileOwnershipConflicts(any(), any(), any(), any())
+        } returns listOf(
+            FileOwnershipConflict(
+                installedFileId = 7L,
+                installationId = 5L,
+                scriptId = 2L,
+                scriptName = "Old Script",
+                destPath = conflictPath,
+                installedAt = 1L
+            )
+        )
+        every { fileService.exists(any()) } returns false
+        every { fileService.mkdirs(any()) } returns true
+        every { fileService.writeFile(any(), any()) } returns true
+
+        val result = useCase.execute(
+            scriptId = 1L,
+            userId = 0,
+            fileConflictChoices = mapOf(conflictPath to FileConflictChoice.KEEP_CURRENT)
+        )
+
+        assertTrue(result.isSuccess)
+        coVerify {
+            repository.insertInstalledFiles(match { files ->
+                files.size == 1 && files.single().destPath == freshPath
+            })
+        }
+        coVerify(exactly = 0) { repository.markInstalledFilesSuperseded(any(), any()) }
+        verify(exactly = 1) { fileService.writeFile(any(), freshPath) }
+    }
+
+    @Test
+    fun `execute supersedes previous owner when new file wins conflict`() = runTest {
+        val script = createScriptWithAssets("Art/conflict.png" to "new data")
+        val conflictPath = "${buildMlAssetsRoot(0)}/Art/conflict.png"
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery { repository.insertInstallation(any()) } returns 100L
+        coEvery {
+            repository.getActiveFileOwnershipConflicts(any(), any(), any(), any())
+        } returns listOf(
+            FileOwnershipConflict(
+                installedFileId = 7L,
+                installationId = 5L,
+                scriptId = 2L,
+                scriptName = "Old Script",
+                destPath = conflictPath,
+                installedAt = 1L
+            )
+        )
+        coEvery { repository.getInstallationById(5L) } returns com.istarvin.skinscriptinstaller.data.db.entity.Installation(
+            id = 5L,
+            scriptId = 2L,
+            userId = 0,
+            status = "installed"
+        )
+        coEvery { repository.countActiveInstalledFiles(5L) } returns 0
+        every { fileService.exists(any()) } returns true
+        every { fileService.mkdirs(any()) } returns true
+        every { fileService.writeFile(any(), any()) } returns true
+
+        val backupSource = File(tempFolder.root, "backup_conflict.dat")
+        backupSource.writeText("original content")
+        val backupFis = FileInputStream(backupSource)
+        val mockPfd = mockk<ParcelFileDescriptor>(relaxed = true)
+        every { mockPfd.fileDescriptor } returns backupFis.fd
+        every { fileService.openFileForRead(any()) } returns mockPfd
+
+        val result = useCase.execute(1L, 0)
+
+        backupFis.close()
+
+        assertTrue(result.isSuccess)
+        coVerify { repository.markInstalledFilesSuperseded(listOf(7L), 100L) }
+        coVerify {
+            repository.updateInstallation(match {
+                it.id == 5L && it.status == com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus.SUPERSEDED
+            })
+        }
     }
 
     // --- Helpers ---

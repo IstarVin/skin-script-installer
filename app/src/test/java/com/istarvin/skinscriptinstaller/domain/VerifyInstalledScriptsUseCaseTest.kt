@@ -76,7 +76,7 @@ class VerifyInstalledScriptsUseCaseTest {
         every { fileService.exists(installedFile.destPath) } returns false
         coEvery { repository.getLatestInstallationsOnce(0) } returns listOf(installation)
         coEvery { repository.getScriptById(script.id) } returns script
-        coEvery { repository.getInstalledFilesByInstallation(installation.id) } returns listOf(installedFile)
+        coEvery { repository.getActiveInstalledFilesByInstallation(installation.id) } returns listOf(installedFile)
 
         val didRun = useCase.execute()
 
@@ -113,7 +113,7 @@ class VerifyInstalledScriptsUseCaseTest {
         every { fileService.openFileForRead(installedFile.destPath) } returns remoteDescriptor
         coEvery { repository.getLatestInstallationsOnce(0) } returns listOf(installation)
         coEvery { repository.getScriptById(script.id) } returns script
-        coEvery { repository.getInstalledFilesByInstallation(installation.id) } returns listOf(installedFile)
+        coEvery { repository.getActiveInstalledFilesByInstallation(installation.id) } returns listOf(installedFile)
 
         val didRun = useCase.execute()
 
@@ -133,6 +133,29 @@ class VerifyInstalledScriptsUseCaseTest {
 
         assertFalse(didRun)
         coVerify(exactly = 0) { repository.updateInstallation(any()) }
+    }
+
+    @Test
+    fun `execute marks installation superseded when it has no active files`() = runTest {
+        val installation = Installation(
+            id = 5L,
+            scriptId = 1L,
+            userId = 0,
+            status = InstallationStatus.INSTALLED
+        )
+
+        every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
+        coEvery { repository.getLatestInstallationsOnce(0) } returns listOf(installation)
+        coEvery { repository.getActiveInstalledFilesByInstallation(installation.id) } returns emptyList()
+
+        val didRun = useCase.execute()
+
+        assertTrue(didRun)
+        coVerify {
+            repository.updateInstallation(match {
+                it.id == installation.id && it.status == InstallationStatus.SUPERSEDED
+            })
+        }
     }
 
     private fun createScriptWithAssets(vararg files: Pair<String, String>): SkinScript {

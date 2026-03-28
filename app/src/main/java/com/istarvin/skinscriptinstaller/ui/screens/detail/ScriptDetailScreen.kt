@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.ui.components.ClassifyScriptDialog
+import com.istarvin.skinscriptinstaller.ui.components.FileInstallConflictDialog
 import com.istarvin.skinscriptinstaller.ui.components.HeroInstallConflictDialog
 import com.istarvin.skinscriptinstaller.ui.components.ImportChoiceBottomSheet
 import com.istarvin.skinscriptinstaller.ui.components.InstallStatusChip
@@ -91,6 +92,7 @@ fun ScriptDetailScreen(
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val zipPasswordPrompt by viewModel.zipPasswordPrompt.collectAsState()
     val installConflictWarning by viewModel.installConflictWarning.collectAsState()
+    val fileConflictWarning by viewModel.fileConflictWarning.collectAsState()
     val error by viewModel.error.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -215,14 +217,17 @@ fun ScriptDetailScreen(
                         val status = installation?.status
                         val isInstalled = status == InstallationStatus.INSTALLED
                         val isReplaced = status == InstallationStatus.REPLACED
+                        val isSuperseded = status == InstallationStatus.SUPERSEDED
                         val containerColor = when {
                             isInstalled -> MaterialTheme.colorScheme.primaryContainer
                             isReplaced -> MaterialTheme.colorScheme.errorContainer
+                            isSuperseded -> MaterialTheme.colorScheme.secondaryContainer
                             else -> MaterialTheme.colorScheme.surfaceVariant
                         }
                         val contentColor = when {
                             isInstalled -> MaterialTheme.colorScheme.onPrimaryContainer
                             isReplaced -> MaterialTheme.colorScheme.onErrorContainer
+                            isSuperseded -> MaterialTheme.colorScheme.onSecondaryContainer
                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                         }
                         val secondaryColor = contentColor.copy(alpha = AppAlpha.SecondaryText)
@@ -257,7 +262,8 @@ fun ScriptDetailScreen(
 
                                     if (
                                         inst.status == InstallationStatus.INSTALLED ||
-                                        inst.status == InstallationStatus.REPLACED
+                                        inst.status == InstallationStatus.REPLACED ||
+                                        inst.status == InstallationStatus.SUPERSEDED
                                     ) {
                                         Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
                                         Text(
@@ -300,7 +306,10 @@ fun ScriptDetailScreen(
                     val canPrimaryAction =
                         !isOperating && !isRefreshing && isShizukuReady && eligibleUserIds.isNotEmpty()
                     val canRestore = !isOperating && !isRefreshing && isShizukuReady &&
-                        status == InstallationStatus.INSTALLED
+                        (
+                            status == InstallationStatus.INSTALLED ||
+                                status == InstallationStatus.SUPERSEDED
+                            )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -341,6 +350,24 @@ fun ScriptDetailScreen(
                                 text = "Mobile Legends replaced one or more installed files. Restore is disabled. Reinstall this script to apply it again.",
                                 modifier = Modifier.padding(AppDimens.SpaceMd),
                                 color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+
+                    if (status == InstallationStatus.SUPERSEDED) {
+                        Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
+                        ) {
+                            Text(
+                                text = "A newer script took ownership of this install's files. Restore will roll back newer owners first, then restore this script. Reinstall applies this script on top of the current files.",
+                                modifier = Modifier.padding(AppDimens.SpaceMd),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
@@ -521,6 +548,18 @@ fun ScriptDetailScreen(
                 conflictingScriptNames = warning.conflicts.map { it.scriptName },
                 onProceed = viewModel::confirmInstallConflictWarning,
                 onDismiss = viewModel::dismissInstallConflictWarning
+            )
+        }
+
+        fileConflictWarning?.let { warning ->
+            FileInstallConflictDialog(
+                targetScriptName = warning.targetScriptName,
+                targetUserId = warning.targetUserId,
+                conflicts = warning.conflicts,
+                selections = warning.selections,
+                onSelectionChange = viewModel::updateFileConflictChoice,
+                onProceed = viewModel::confirmFileConflictWarning,
+                onDismiss = viewModel::dismissFileConflictWarning
             )
         }
     }

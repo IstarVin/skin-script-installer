@@ -6,10 +6,12 @@ import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
+import com.istarvin.skinscriptinstaller.data.db.query.FileOwnershipConflict
 import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
 import com.istarvin.skinscriptinstaller.domain.ClassifyScriptUseCase
+import com.istarvin.skinscriptinstaller.domain.FileConflictChoice
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.InstallProgress
 import com.istarvin.skinscriptinstaller.domain.InstallScriptUseCase
@@ -79,6 +81,7 @@ class ScriptDetailViewModelTest {
         every { repository.getAllHeroes() } returns flowOf(emptyList())
         every { repository.observeLatestInstallation(any(), any()) } returns flowOf(null)
         coEvery { repository.getActiveHeroInstallationConflicts(any(), any(), any()) } returns emptyList()
+        coEvery { repository.getActiveFileOwnershipConflicts(any(), any(), any(), any()) } returns emptyList()
 
         userSelectionManager = UserSelectionManager(activeUserStore, shizukuManager)
     }
@@ -186,12 +189,7 @@ class ScriptDetailViewModelTest {
 
     @Test
     fun `install calls InstallScriptUseCase with correct scriptId and userId`() = runTest {
-        val script = SkinScript(
-            id = 1L,
-            name = "Test",
-            storagePath = tempFolder.root.absolutePath,
-            heroId = 1L
-        )
+        val script = createInstallableScript(name = "Test", heroId = 1L)
         coEvery { repository.getScriptById(1L) } returns script
 
         val fileService = mockk<IFileService>(relaxed = true)
@@ -200,7 +198,7 @@ class ScriptDetailViewModelTest {
 
         val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
         every { repository.observeLatestInstallation(1L, 0) } returns flowOf(installation)
-        coEvery { installScriptUseCase.execute(1L, 0) } answers { Result.success(installation) }
+        coEvery { installScriptUseCase.execute(1L, 0, any()) } answers { Result.success(installation) }
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -208,7 +206,7 @@ class ScriptDetailViewModelTest {
         vm.install()
         advanceUntilIdle()
 
-        coVerify { installScriptUseCase.execute(1L, 0) }
+        coVerify { installScriptUseCase.execute(1L, 0, any()) }
         assertEquals(installation, vm.installation.value)
     }
 
@@ -257,7 +255,7 @@ class ScriptDetailViewModelTest {
         advanceUntilIdle()
 
         assertEquals("Classify this script before installing", vm.error.value)
-        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any()) }
+        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any(), any()) }
     }
 
     @Test
@@ -280,19 +278,14 @@ class ScriptDetailViewModelTest {
 
     @Test
     fun `install sets error on failure`() = runTest {
-        val script = SkinScript(
-            id = 1L,
-            name = "Test",
-            storagePath = tempFolder.root.absolutePath,
-            heroId = 1L
-        )
+        val script = createInstallableScript(name = "Test", heroId = 1L)
         coEvery { repository.getScriptById(1L) } returns script
 
         val fileService = mockk<IFileService>(relaxed = true)
         every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
         fileServiceFlow.value = fileService
 
-        coEvery { installScriptUseCase.execute(1L, 0) } answers { Result.failure(Exception("Install error")) }
+        coEvery { installScriptUseCase.execute(1L, 0, any()) } answers { Result.failure(Exception("Install error")) }
 
         val vm = createViewModel()
         advanceUntilIdle()
@@ -335,7 +328,7 @@ class ScriptDetailViewModelTest {
         assertEquals("Miya", vm.installConflictWarning.value?.heroName)
         assertEquals("New Miya", vm.installConflictWarning.value?.targetScriptName)
         assertEquals(conflicts, vm.installConflictWarning.value?.conflicts)
-        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any()) }
+        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any(), any()) }
     }
 
     @Test
@@ -373,17 +366,12 @@ class ScriptDetailViewModelTest {
 
         assertNull(vm.installConflictWarning.value)
         coVerify(exactly = 0) { restoreScriptUseCase.execute(any()) }
-        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any()) }
+        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any(), any()) }
     }
 
     @Test
     fun `confirmInstallConflictWarning restores conflicts then installs`() = runTest {
-        val script = SkinScript(
-            id = 1L,
-            name = "New Miya",
-            storagePath = tempFolder.root.absolutePath,
-            heroId = 1L
-        )
+        val script = createInstallableScript(name = "New Miya", heroId = 1L)
         val conflicts = listOf(
             HeroInstallationConflict(
                 installationId = 20L,
@@ -403,7 +391,7 @@ class ScriptDetailViewModelTest {
         coEvery { repository.getActiveHeroInstallationConflicts(1L, 0, 1L) } returns conflicts
         coEvery { restoreScriptUseCase.execute(20L) } returns Result.success(Unit)
         coEvery { restoreScriptUseCase.execute(21L) } returns Result.success(Unit)
-        coEvery { installScriptUseCase.execute(1L, 0) } returns Result.success(newInstallation)
+        coEvery { installScriptUseCase.execute(1L, 0, any()) } returns Result.success(newInstallation)
 
         val fileService = mockk<IFileService>(relaxed = true)
         every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
@@ -420,20 +408,111 @@ class ScriptDetailViewModelTest {
         coVerify(ordering = Ordering.ORDERED) {
             restoreScriptUseCase.execute(20L)
             restoreScriptUseCase.execute(21L)
-            installScriptUseCase.execute(1L, 0)
+            installScriptUseCase.execute(1L, 0, any())
         }
         assertNull(vm.installConflictWarning.value)
         assertEquals(newInstallation, vm.installation.value)
     }
 
     @Test
-    fun `confirmInstallConflictWarning stops when restore fails`() = runTest {
+    fun `install with file conflicts opens file warning before install`() = runTest {
+        val storageDir = tempFolder.newFolder("script_file_conflicts")
+        val assetsDir = File(storageDir, "Android/data/com.mobile.legends/files/dragon2017/assets/Art")
+        assetsDir.mkdirs()
+        File(assetsDir, "hero.png").writeText("data")
         val script = SkinScript(
             id = 1L,
             name = "New Miya",
-            storagePath = tempFolder.root.absolutePath,
+            storagePath = storageDir.absolutePath,
             heroId = 1L
         )
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery {
+            repository.getActiveFileOwnershipConflicts(any(), any(), any(), any())
+        } returns listOf(
+            com.istarvin.skinscriptinstaller.data.db.query.FileOwnershipConflict(
+                installedFileId = 1L,
+                installationId = 20L,
+                scriptId = 2L,
+                scriptName = "Old Miya",
+                destPath = "/storage/emulated/0/Android/data/com.mobile.legends/files/dragon2017/assets/Art/hero.png",
+                installedAt = 1L
+            )
+        )
+
+        val fileService = mockk<IFileService>(relaxed = true)
+        every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
+        fileServiceFlow.value = fileService
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.install()
+        advanceUntilIdle()
+
+        assertNull(vm.installConflictWarning.value)
+        assertNotNull(vm.fileConflictWarning.value)
+        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any(), any()) }
+    }
+
+    @Test
+    fun `confirmFileConflictWarning installs with selected file decisions`() = runTest {
+        val storageDir = tempFolder.newFolder("script_file_selection")
+        val assetsDir = File(storageDir, "Android/data/com.mobile.legends/files/dragon2017/assets/Art")
+        assetsDir.mkdirs()
+        File(assetsDir, "hero.png").writeText("data")
+        val script = SkinScript(
+            id = 1L,
+            name = "New Miya",
+            storagePath = storageDir.absolutePath,
+            heroId = 1L
+        )
+        val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery {
+            repository.getActiveFileOwnershipConflicts(any(), any(), any(), any())
+        } returns listOf(
+            com.istarvin.skinscriptinstaller.data.db.query.FileOwnershipConflict(
+                installedFileId = 1L,
+                installationId = 20L,
+                scriptId = 2L,
+                scriptName = "Old Miya",
+                destPath = "/storage/emulated/0/Android/data/com.mobile.legends/files/dragon2017/assets/Art/hero.png",
+                installedAt = 1L
+            )
+        )
+        coEvery { installScriptUseCase.execute(1L, 0, any()) } returns Result.success(installation)
+
+        val fileService = mockk<IFileService>(relaxed = true)
+        every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
+        fileServiceFlow.value = fileService
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.install()
+        advanceUntilIdle()
+        vm.updateFileConflictChoice(
+            "/storage/emulated/0/Android/data/com.mobile.legends/files/dragon2017/assets/Art/hero.png",
+            FileConflictChoice.KEEP_CURRENT
+        )
+        vm.confirmFileConflictWarning()
+        advanceUntilIdle()
+
+        coVerify {
+            installScriptUseCase.execute(
+                1L,
+                0,
+                match { choices ->
+                    choices["/storage/emulated/0/Android/data/com.mobile.legends/files/dragon2017/assets/Art/hero.png"] == FileConflictChoice.KEEP_CURRENT
+                }
+            )
+        }
+    }
+
+    @Test
+    fun `confirmInstallConflictWarning stops when restore fails`() = runTest {
+        val script = createInstallableScript(name = "New Miya", heroId = 1L)
         coEvery { repository.getScriptById(1L) } returns script
         coEvery { repository.getHeroById(1L) } returns Hero(id = 1L, name = "Miya")
         coEvery {
@@ -462,7 +541,7 @@ class ScriptDetailViewModelTest {
 
         assertEquals("Restore error", vm.error.value)
         coVerify { restoreScriptUseCase.execute(20L) }
-        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any()) }
+        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any(), any()) }
     }
 
     @Test
@@ -489,12 +568,7 @@ class ScriptDetailViewModelTest {
 
     @Test
     fun `reinstall restores first then installs`() = runTest {
-        val script = SkinScript(
-            id = 1L,
-            name = "Test",
-            storagePath = tempFolder.root.absolutePath,
-            heroId = 1L
-        )
+        val script = createInstallableScript(name = "Test", heroId = 1L)
         val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
         coEvery { repository.getScriptById(1L) } returns script
         coEvery { repository.getLatestInstallation(1L, 0) } returns installation
@@ -502,7 +576,7 @@ class ScriptDetailViewModelTest {
         coEvery { restoreScriptUseCase.execute(10L) } answers { Result.success(Unit) }
 
         val newInstallation = Installation(id = 11L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
-        coEvery { installScriptUseCase.execute(1L, 0) } answers { Result.success(newInstallation) }
+        coEvery { installScriptUseCase.execute(1L, 0, any()) } answers { Result.success(newInstallation) }
 
         val fileService = mockk<IFileService>(relaxed = true)
         every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
@@ -516,7 +590,92 @@ class ScriptDetailViewModelTest {
 
         coVerify(ordering = Ordering.ORDERED) {
             restoreScriptUseCase.execute(10L)
-            installScriptUseCase.execute(1L, 0)
+            installScriptUseCase.execute(1L, 0, emptyMap())
+        }
+    }
+
+    @Test
+    fun `reinstall with file conflicts opens warning before restore`() = runTest {
+        val script = createInstallableScript(name = "Test", heroId = 1L)
+        val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
+        val conflictPath = "/storage/emulated/0/Android/data/com.mobile.legends/files/dragon2017/assets/Art/hero.png"
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery { repository.getLatestInstallation(1L, 0) } returns installation
+        every { repository.observeLatestInstallation(1L, 0) } returns flowOf(installation)
+        coEvery {
+            repository.getActiveFileOwnershipConflicts(any(), any(), any(), any())
+        } returns listOf(
+            FileOwnershipConflict(
+                installedFileId = 1L,
+                installationId = 20L,
+                scriptId = 2L,
+                scriptName = "Old Script",
+                destPath = conflictPath,
+                installedAt = 1L
+            )
+        )
+
+        val fileService = mockk<IFileService>(relaxed = true)
+        every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
+        fileServiceFlow.value = fileService
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.reinstall()
+        advanceUntilIdle()
+
+        assertNotNull(vm.fileConflictWarning.value)
+        coVerify(exactly = 0) { restoreScriptUseCase.execute(any()) }
+        coVerify(exactly = 0) { installScriptUseCase.execute(any(), any(), any()) }
+    }
+
+    @Test
+    fun `confirmFileConflictWarning on reinstall restores then installs with selected choices`() = runTest {
+        val script = createInstallableScript(name = "Test", heroId = 1L)
+        val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
+        val newInstallation = Installation(id = 11L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
+        val conflictPath = "/storage/emulated/0/Android/data/com.mobile.legends/files/dragon2017/assets/Art/hero.png"
+        coEvery { repository.getScriptById(1L) } returns script
+        coEvery { repository.getLatestInstallation(1L, 0) } returns installation
+        every { repository.observeLatestInstallation(1L, 0) } returns flowOf(installation)
+        coEvery {
+            repository.getActiveFileOwnershipConflicts(any(), any(), any(), any())
+        } returns listOf(
+            FileOwnershipConflict(
+                installedFileId = 1L,
+                installationId = 20L,
+                scriptId = 2L,
+                scriptName = "Old Script",
+                destPath = conflictPath,
+                installedAt = 1L
+            )
+        )
+        coEvery { restoreScriptUseCase.execute(10L) } returns Result.success(Unit)
+        coEvery { installScriptUseCase.execute(1L, 0, any()) } returns Result.success(newInstallation)
+
+        val fileService = mockk<IFileService>(relaxed = true)
+        every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
+        fileServiceFlow.value = fileService
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.reinstall()
+        advanceUntilIdle()
+        vm.updateFileConflictChoice(conflictPath, FileConflictChoice.KEEP_CURRENT)
+        vm.confirmFileConflictWarning()
+        advanceUntilIdle()
+
+        coVerify(ordering = Ordering.ORDERED) {
+            restoreScriptUseCase.execute(10L)
+            installScriptUseCase.execute(
+                1L,
+                0,
+                match { choices ->
+                    choices[conflictPath] == FileConflictChoice.KEEP_CURRENT
+                }
+            )
         }
     }
 
@@ -614,5 +773,25 @@ class ScriptDetailViewModelTest {
         assertEquals("Miya", vm.suggestedHeroName.value)
 
         collectJob.cancel()
+    }
+
+    private fun createInstallableScript(
+        id: Long = 1L,
+        name: String = "Test",
+        heroId: Long? = null
+    ): SkinScript {
+        val storageDir = tempFolder.newFolder("installable_${System.nanoTime()}")
+        val assetsDir = File(
+            storageDir,
+            "Android/data/com.mobile.legends/files/dragon2017/assets/Art"
+        )
+        assetsDir.mkdirs()
+        File(assetsDir, "hero.png").writeText("data")
+        return SkinScript(
+            id = id,
+            name = name,
+            storagePath = storageDir.absolutePath,
+            heroId = heroId
+        )
     }
 }

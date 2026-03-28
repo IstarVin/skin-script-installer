@@ -24,6 +24,6 @@ data class Installation(
     val userId: Int = 0,
     val installedAt: Long = System.currentTimeMillis(),
     val restoredAt: Long? = null,
-    val status: String = InstallationStatus.INSTALLED // "installed" | "replaced" | "restored"
+    val status: String = InstallationStatus.INSTALLED // "installed" | "replaced" | "restored" | "superseded"
 )
 

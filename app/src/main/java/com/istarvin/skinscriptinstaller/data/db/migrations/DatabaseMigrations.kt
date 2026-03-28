@@ -4,7 +4,7 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 object DatabaseMigrations {
-    val availablePaths: Set<Pair<Int, Int>> = setOf(1 to 2, 2 to 3, 3 to 4)
+    val availablePaths: Set<Pair<Int, Int>> = setOf(1 to 2, 2 to 3, 3 to 4, 4 to 5)
 
     val MIGRATION_1_2 = object : Migration(1, 2) {
         override fun migrate(db: SupportSQLiteDatabase) {
@@ -71,6 +71,20 @@ object DatabaseMigrations {
     val MIGRATION_3_4 = object : Migration(3, 4) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE heroes ADD COLUMN heroIcon TEXT")
+        }
+    }
+
+    val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE installed_files ADD COLUMN supersededByInstallationId INTEGER"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_installed_files_destPath ON installed_files(destPath)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS index_installed_files_supersededByInstallationId ON installed_files(supersededByInstallationId)"
+            )
         }
     }
 }

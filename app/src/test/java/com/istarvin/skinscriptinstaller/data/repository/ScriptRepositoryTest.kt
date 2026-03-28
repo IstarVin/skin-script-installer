@@ -9,6 +9,7 @@ import com.istarvin.skinscriptinstaller.data.db.AppDatabase
 import com.istarvin.skinscriptinstaller.data.db.entity.InstalledFile
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
+import com.istarvin.skinscriptinstaller.data.db.query.FileOwnershipConflict
 import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import com.istarvin.skinscriptinstaller.data.db.query.LatestInstalledScript
 import io.mockk.*
@@ -238,6 +239,55 @@ class ScriptRepositoryTest {
 
         val result = repository.getInstalledFilesByInstallation(10L)
         assertEquals(files, result)
+    }
+
+    @Test
+    fun `getActiveFileOwnershipConflicts delegates to dao and de duplicates by path`() = runTest {
+        val conflicts = listOf(
+            FileOwnershipConflict(
+                installedFileId = 3L,
+                installationId = 20L,
+                scriptId = 2L,
+                scriptName = "Old Script",
+                destPath = "/path/a",
+                installedAt = 20L
+            ),
+            FileOwnershipConflict(
+                installedFileId = 4L,
+                installationId = 19L,
+                scriptId = 3L,
+                scriptName = "Older Script",
+                destPath = "/path/a",
+                installedAt = 10L
+            )
+        )
+        coEvery { installedFileDao.getActiveOwnershipConflicts(listOf("/path/a"), 0) } returns conflicts
+
+        val result = repository.getActiveFileOwnershipConflicts(listOf("/path/a"), 0)
+
+        assertEquals(listOf(conflicts.first()), result)
+        coVerify { installedFileDao.getActiveOwnershipConflicts(listOf("/path/a"), 0) }
+    }
+
+    @Test
+    fun `reactivateInstalledFilesSupersededBy returns affected installations`() = runTest {
+        coEvery { installedFileDao.getInstallationIdsSupersededBy(10L) } returns listOf(1L, 2L, 1L)
+        coEvery { installedFileDao.reactivateSupersededBy(10L) } just Runs
+
+        val result = repository.reactivateInstalledFilesSupersededBy(10L)
+
+        assertEquals(setOf(1L, 2L), result)
+        coVerify { installedFileDao.reactivateSupersededBy(10L) }
+    }
+
+    @Test
+    fun `getSupersedingInstallationIds delegates to dao`() = runTest {
+        coEvery { installedFileDao.getSupersedingInstallationIds(10L) } returns listOf(20L, 30L, 20L)
+
+        val result = repository.getSupersedingInstallationIds(10L)
+
+        assertEquals(setOf(20L, 30L), result)
+        coVerify { installedFileDao.getSupersedingInstallationIds(10L) }
     }
 
     @Test

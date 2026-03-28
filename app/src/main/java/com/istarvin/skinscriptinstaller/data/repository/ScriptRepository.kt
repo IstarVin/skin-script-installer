@@ -11,6 +11,7 @@ import com.istarvin.skinscriptinstaller.data.db.entity.InstalledFile
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
+import com.istarvin.skinscriptinstaller.data.db.query.FileOwnershipConflict
 import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import com.istarvin.skinscriptinstaller.data.db.query.LatestInstalledScript
 import androidx.room.withTransaction
@@ -92,6 +93,54 @@ class ScriptRepository @Inject constructor(
 
     suspend fun getInstalledFilesByInstallation(installationId: Long): List<InstalledFile> =
         installedFileDao.getByInstallationId(installationId)
+
+    suspend fun getActiveInstalledFilesByInstallation(installationId: Long): List<InstalledFile> =
+        installedFileDao.getActiveByInstallationId(installationId)
+
+    suspend fun countActiveInstalledFiles(installationId: Long): Int =
+        installedFileDao.countActiveByInstallationId(installationId)
+
+    suspend fun getActiveFileOwnershipConflicts(
+        destPaths: List<String>,
+        userId: Int,
+        excludeScriptId: Long? = null,
+        excludeInstallationIds: Set<Long> = emptySet()
+    ): List<FileOwnershipConflict> {
+        if (destPaths.isEmpty()) {
+            return emptyList()
+        }
+
+        return installedFileDao.getActiveOwnershipConflicts(destPaths.distinct(), userId)
+            .asSequence()
+            .filter { conflict ->
+                excludeScriptId == null || conflict.scriptId != excludeScriptId
+            }
+            .filterNot { conflict -> conflict.installationId in excludeInstallationIds }
+            .distinctBy { conflict -> conflict.destPath }
+            .toList()
+    }
+
+    suspend fun markInstalledFilesSuperseded(
+        fileIds: List<Long>,
+        supersededByInstallationId: Long
+    ) {
+        if (fileIds.isEmpty()) {
+            return
+        }
+        installedFileDao.markSuperseded(fileIds, supersededByInstallationId)
+    }
+
+    suspend fun reactivateInstalledFilesSupersededBy(installationId: Long): Set<Long> {
+        val affectedInstallationIds = installedFileDao.getInstallationIdsSupersededBy(installationId)
+            .toSet()
+        if (affectedInstallationIds.isNotEmpty()) {
+            installedFileDao.reactivateSupersededBy(installationId)
+        }
+        return affectedInstallationIds
+    }
+
+    suspend fun getSupersedingInstallationIds(installationId: Long): Set<Long> =
+        installedFileDao.getSupersedingInstallationIds(installationId).toSet()
 
     suspend fun deleteInstalledFilesByInstallation(installationId: Long) =
         installedFileDao.deleteByInstallationId(installationId)

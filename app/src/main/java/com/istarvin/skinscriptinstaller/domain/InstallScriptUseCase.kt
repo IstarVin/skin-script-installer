@@ -28,7 +28,11 @@ class InstallScriptUseCase @Inject constructor(
     private val _progress = MutableStateFlow<InstallProgress?>(null)
     val progress: StateFlow<InstallProgress?> = _progress.asStateFlow()
 
-    suspend fun execute(scriptId: Long, userId: Int = 0): Result<Installation> = withContext(Dispatchers.IO) {
+    suspend fun execute(
+        scriptId: Long,
+        userId: Int = 0,
+        fileConflictChoices: Map<String, FileConflictChoice> = emptyMap()
+    ): Result<Installation> = withContext(Dispatchers.IO) {
         try {
             val script = repository.getScriptById(scriptId)
                 ?: return@withContext Result.failure(Exception("Script not found"))
@@ -36,20 +40,15 @@ class InstallScriptUseCase @Inject constructor(
             val service = shizukuManager.fileService.value
                 ?: return@withContext Result.failure(Exception("Shizuku file service not available"))
 
-            // Find the assets subtree within the imported script
-            val assetsDir = resolveImportedAssetsDir(script.storagePath)
-            if (!assetsDir.exists() || !assetsDir.isDirectory) {
-                return@withContext Result.failure(
-                    Exception("Script has no assets directory at: ${assetsDir.path}")
-                )
+            val installPlan = buildScriptInstallPlan(script.storagePath, userId)
+                .getOrElse { error -> return@withContext Result.failure(error) }
+
+            val filesToInstall = installPlan.files.filter { plannedFile ->
+                fileConflictChoices[plannedFile.destPath] != FileConflictChoice.KEEP_CURRENT
             }
 
-            // Collect all files to install
-            val filesToInstall = mutableListOf<File>()
-            collectFiles(assetsDir, filesToInstall)
-
             if (filesToInstall.isEmpty()) {
-                return@withContext Result.failure(Exception("No files to install"))
+                return@withContext Result.failure(Exception("No files selected to install"))
             }
 
             // Create installation record
@@ -64,13 +63,17 @@ class InstallScriptUseCase @Inject constructor(
             val backupDir = File(context.filesDir, "backups/$installationId")
 
             val installedFiles = mutableListOf<InstalledFile>()
+            val supersededConflicts = mutableListOf<Long>()
+            val affectedInstallations = linkedSetOf<Long>()
 
-            val targetAssetsRoot = buildMlAssetsRoot(userId)
+            val activeConflictsByDestPath = repository.getActiveFileOwnershipConflicts(
+                destPaths = filesToInstall.map { it.destPath },
+                userId = userId
+            ).associateBy { conflict -> conflict.destPath }
 
-            filesToInstall.forEachIndexed { index, sourceFile ->
-                // Calculate relative path from the assets dir
-                val relPath = sourceFile.relativeTo(assetsDir).path
-                val destPath = "$targetAssetsRoot/$relPath"
+            filesToInstall.forEachIndexed { index, plannedFile ->
+                val relPath = plannedFile.relativePath
+                val destPath = plannedFile.destPath
 
                 _progress.value = InstallProgress(
                     currentIndex = index + 1,
@@ -102,7 +105,7 @@ class InstallScriptUseCase @Inject constructor(
 
                 // Write source file to ML path via Shizuku
                 val sourcePfd = ParcelFileDescriptor.open(
-                    sourceFile,
+                    plannedFile.sourceFile,
                     ParcelFileDescriptor.MODE_READ_ONLY
                 )
                 val writeSuccess = service.writeFile(sourcePfd, destPath)
@@ -113,6 +116,7 @@ class InstallScriptUseCase @Inject constructor(
                         "InstallScript",
                         "Failed to write: $relPath"
                     )
+                    return@forEachIndexed
                 }
 
                 installedFiles.add(
@@ -120,13 +124,40 @@ class InstallScriptUseCase @Inject constructor(
                         installationId = installationId,
                         destPath = destPath,
                         wasOverwrite = wasOverwrite,
-                        backupPath = backupPath
+                        backupPath = backupPath,
+                        supersededByInstallationId = null
                     )
                 )
+
+                activeConflictsByDestPath[destPath]?.let { conflict ->
+                    supersededConflicts += conflict.installedFileId
+                    affectedInstallations += conflict.installationId
+                }
+            }
+
+            if (installedFiles.isEmpty()) {
+                return@withContext Result.failure(Exception("Failed to install any files"))
             }
 
             // Batch insert all installed file records
             repository.insertInstalledFiles(installedFiles)
+
+            if (supersededConflicts.isNotEmpty()) {
+                repository.markInstalledFilesSuperseded(
+                    fileIds = supersededConflicts,
+                    supersededByInstallationId = installationId
+                )
+
+                affectedInstallations.forEach { affectedInstallationId ->
+                    val affectedInstallation = repository.getInstallationById(affectedInstallationId)
+                        ?: return@forEach
+                    if (repository.countActiveInstalledFiles(affectedInstallationId) == 0) {
+                        repository.updateInstallation(
+                            affectedInstallation.copy(status = InstallationStatus.SUPERSEDED)
+                        )
+                    }
+                }
+            }
 
             _progress.value = InstallProgress(
                 currentIndex = filesToInstall.size,
@@ -149,16 +180,6 @@ class InstallScriptUseCase @Inject constructor(
 
     fun resetProgress() {
         _progress.value = null
-    }
-
-    private fun collectFiles(dir: File, result: MutableList<File>) {
-        dir.listFiles()?.forEach { file ->
-            if (file.isDirectory) {
-                collectFiles(file, result)
-            } else {
-                result.add(file)
-            }
-        }
     }
 }
 

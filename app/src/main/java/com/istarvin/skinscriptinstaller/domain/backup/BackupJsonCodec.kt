@@ -67,6 +67,10 @@ object BackupJsonCodec {
                             .put("destPath", file.destPath)
                             .put("wasOverwrite", file.wasOverwrite)
                             .put("backupRelativePath", file.backupRelativePath)
+                            .put(
+                                "supersededByInstallationId",
+                                file.supersededByInstallationId ?: JSONObject.NULL
+                            )
                     )
                 }
             })
@@ -123,7 +127,8 @@ object BackupJsonCodec {
                 destPath = item.getString("destPath"),
                 wasOverwrite = item.optBoolean("wasOverwrite", false),
                 backupRelativePath = item.takeUnless { it.isNull("backupRelativePath") }
-                    ?.getString("backupRelativePath")
+                    ?.getString("backupRelativePath"),
+                supersededByInstallationId = item.optNullableLong("supersededByInstallationId")
             )
         }
 
