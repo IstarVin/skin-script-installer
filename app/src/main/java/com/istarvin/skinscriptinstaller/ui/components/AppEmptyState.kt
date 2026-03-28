@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -19,6 +20,8 @@ fun AppEmptyState(
     icon: ImageVector,
     title: String,
     subtitle: String,
+    actionLabel: String? = null,
+    onActionClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -43,5 +46,12 @@ fun AppEmptyState(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.SecondaryText)
         )
+
+        if (actionLabel != null && onActionClick != null) {
+            Spacer(modifier = Modifier.height(AppDimens.SpaceLg))
+            OutlinedButton(onClick = onActionClick) {
+                Text(text = actionLabel)
+            }
+        }
     }
 }

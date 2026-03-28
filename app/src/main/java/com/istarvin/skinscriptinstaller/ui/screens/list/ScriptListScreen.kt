@@ -48,11 +48,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -67,6 +67,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import coil3.compose.AsyncImage
 import com.istarvin.skinscriptinstaller.ui.components.AppEmptyState
 import com.istarvin.skinscriptinstaller.ui.components.CollapsibleSection
 import com.istarvin.skinscriptinstaller.ui.components.DeleteScriptDialog
@@ -75,7 +76,6 @@ import com.istarvin.skinscriptinstaller.ui.components.InstallStatusChip
 import com.istarvin.skinscriptinstaller.ui.components.ZipPasswordDialog
 import com.istarvin.skinscriptinstaller.ui.theme.AppAlpha
 import com.istarvin.skinscriptinstaller.ui.theme.AppDimens
-import coil3.compose.AsyncImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -238,7 +238,11 @@ fun ScriptListScreen(
                     AppEmptyState(
                         icon = Icons.Outlined.FolderOpen,
                         title = "No scripts imported",
-                        subtitle = "Tap + to import a skin script folder or ZIP"
+                        subtitle = "Import a skin script folder or ZIP to get started",
+                        actionLabel = "Import Script",
+                        onActionClick = {
+                            showImportChoiceDialog = true
+                        }
                     )
                 }
             } else if (heroScriptSections.isEmpty() && !isImporting) {

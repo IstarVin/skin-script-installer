@@ -1,6 +1,13 @@
 package com.istarvin.skinscriptinstaller.ui.components
 
-import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -61,9 +68,7 @@ fun CollapsibleSection(
     content: @Composable () -> Unit
 ) {
     Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .animateContentSize(),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(
             defaultElevation = if (isExpanded) expandedElevation else collapsedElevation
@@ -111,7 +116,21 @@ fun CollapsibleSection(
             )
         }
 
-        if (isExpanded) {
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically(
+                animationSpec = tween(
+                    durationMillis = 180,
+                    easing = LinearOutSlowInEasing
+                )
+            ) + fadeIn(animationSpec = tween(durationMillis = 120)),
+            exit = shrinkVertically(
+                animationSpec = tween(
+                    durationMillis = 110,
+                    easing = FastOutLinearInEasing
+                )
+            ) + fadeOut(animationSpec = tween(durationMillis = 90))
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
