@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.ParcelFileDescriptor
 import com.istarvin.skinscriptinstaller.data.db.entity.InstalledFile
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
+import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -24,10 +25,6 @@ class InstallScriptUseCase @Inject constructor(
     private val repository: ScriptRepository,
     private val shizukuManager: ShizukuManager
 ) {
-    companion object {
-        private const val ML_ASSETS_REL = "Android/data/com.mobile.legends/files/dragon2017/assets"
-    }
-
     private val _progress = MutableStateFlow<InstallProgress?>(null)
     val progress: StateFlow<InstallProgress?> = _progress.asStateFlow()
 
@@ -40,7 +37,7 @@ class InstallScriptUseCase @Inject constructor(
                 ?: return@withContext Result.failure(Exception("Shizuku file service not available"))
 
             // Find the assets subtree within the imported script
-            val assetsDir = File(script.storagePath, ML_ASSETS_REL)
+            val assetsDir = resolveImportedAssetsDir(script.storagePath)
             if (!assetsDir.exists() || !assetsDir.isDirectory) {
                 return@withContext Result.failure(
                     Exception("Script has no assets directory at: ${assetsDir.path}")
@@ -56,7 +53,11 @@ class InstallScriptUseCase @Inject constructor(
             }
 
             // Create installation record
-            val installation = Installation(scriptId = scriptId, userId = userId)
+            val installation = Installation(
+                scriptId = scriptId,
+                userId = userId,
+                status = InstallationStatus.INSTALLED
+            )
             val installationId = repository.insertInstallation(installation)
 
             // Backup directory for this installation
@@ -64,7 +65,7 @@ class InstallScriptUseCase @Inject constructor(
 
             val installedFiles = mutableListOf<InstalledFile>()
 
-            val targetAssetsRoot = buildAssetsPath(userId)
+            val targetAssetsRoot = buildMlAssetsRoot(userId)
 
             filesToInstall.forEachIndexed { index, sourceFile ->
                 // Calculate relative path from the assets dir
@@ -136,7 +137,7 @@ class InstallScriptUseCase @Inject constructor(
 
             val completedInstallation = installation.copy(
                 id = installationId,
-                status = "installed"
+                status = InstallationStatus.INSTALLED
             )
 
             Result.success(completedInstallation)
@@ -158,10 +159,6 @@ class InstallScriptUseCase @Inject constructor(
                 result.add(file)
             }
         }
-    }
-
-    private fun buildAssetsPath(userId: Int): String {
-        return "/storage/emulated/$userId/$ML_ASSETS_REL"
     }
 }
 

@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.ui.theme.AppAlpha
 import com.istarvin.skinscriptinstaller.ui.theme.AppDimens
 
@@ -17,8 +18,9 @@ fun InstallStatusChip(
 ) {
     val normalized = status.trim().lowercase()
     val (text, color) = when (normalized) {
-        "installed" -> "Installed" to MaterialTheme.colorScheme.primary
-        "restored" -> "Restored" to MaterialTheme.colorScheme.tertiary
+        InstallationStatus.INSTALLED -> "Installed" to MaterialTheme.colorScheme.primary
+        InstallationStatus.REPLACED -> "Replaced" to MaterialTheme.colorScheme.error
+        InstallationStatus.RESTORED -> "Restored" to MaterialTheme.colorScheme.tertiary
         else -> "Not Installed" to MaterialTheme.colorScheme.outline
     }
 

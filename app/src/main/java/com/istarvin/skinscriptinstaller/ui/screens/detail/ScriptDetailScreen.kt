@@ -44,6 +44,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -57,6 +58,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.ui.components.ClassifyScriptDialog
 import com.istarvin.skinscriptinstaller.ui.components.HeroInstallConflictDialog
 import com.istarvin.skinscriptinstaller.ui.components.ImportChoiceBottomSheet
@@ -86,6 +88,7 @@ fun ScriptDetailScreen(
     val restoreProgress by viewModel.restoreProgress.collectAsState()
     val isShizukuReady by viewModel.isShizukuReady.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     val zipPasswordPrompt by viewModel.zipPasswordPrompt.collectAsState()
     val installConflictWarning by viewModel.installConflictWarning.collectAsState()
     val error by viewModel.error.collectAsState()
@@ -139,6 +142,12 @@ fun ScriptDetailScreen(
         }
     }
 
+    LaunchedEffect(script?.id, selectedUserId, isShizukuReady) {
+        if (script != null && isShizukuReady) {
+            viewModel.verifyCurrentInstallation()
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -188,234 +197,261 @@ fun ScriptDetailScreen(
         val flattenedTree = remember(fileTree, expandedDirectoryIds) {
             flattenTree(fileTree, expandedDirectoryIds)
         }
-        LazyColumn(
+        PullToRefreshBox(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = AppDimens.ScreenHorizontal),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceLg)
+            isRefreshing = isRefreshing,
+            onRefresh = viewModel::refreshInstallation
         ) {
-            // Script info card
-            item {
-                script?.let { s ->
-                    val isInstalled = installation?.status == "installed"
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isInstalled)
-                                MaterialTheme.colorScheme.primaryContainer
-                            else
-                                MaterialTheme.colorScheme.surfaceVariant
-                        ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
-                    ) {
-                        Column(modifier = Modifier.padding(AppDimens.SpaceXl)) {
-                            Text(
-                                text = s.name,
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = if (isInstalled)
-                                    MaterialTheme.colorScheme.onPrimaryContainer
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
-                            Text(
-                                text = "Imported: ${formatDate(s.importedAt)}",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (isInstalled)
-                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = AppAlpha.SecondaryText)
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.SecondaryText)
-                            )
-                            Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
-                            Text(
-                                text = "User scope: User $selectedUserId",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (isInstalled)
-                                    MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = AppAlpha.SecondaryText)
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.SecondaryText)
-                            )
-                            installation?.let { inst ->
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceLg)
+            ) {
+                // Script info card
+                item {
+                    script?.let { s ->
+                        val status = installation?.status
+                        val isInstalled = status == InstallationStatus.INSTALLED
+                        val isReplaced = status == InstallationStatus.REPLACED
+                        val containerColor = when {
+                            isInstalled -> MaterialTheme.colorScheme.primaryContainer
+                            isReplaced -> MaterialTheme.colorScheme.errorContainer
+                            else -> MaterialTheme.colorScheme.surfaceVariant
+                        }
+                        val contentColor = when {
+                            isInstalled -> MaterialTheme.colorScheme.onPrimaryContainer
+                            isReplaced -> MaterialTheme.colorScheme.onErrorContainer
+                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                        val secondaryColor = contentColor.copy(alpha = AppAlpha.SecondaryText)
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = containerColor
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
+                        ) {
+                            Column(modifier = Modifier.padding(AppDimens.SpaceXl)) {
+                                Text(
+                                    text = s.name,
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    color = contentColor
+                                )
                                 Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
-                                InstallStatusChip(status = inst.status)
+                                Text(
+                                    text = "Imported: ${formatDate(s.importedAt)}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = secondaryColor
+                                )
+                                Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
+                                Text(
+                                    text = "User scope: User $selectedUserId",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = secondaryColor
+                                )
+                                installation?.let { inst ->
+                                    Spacer(modifier = Modifier.height(AppDimens.SpaceMd))
+                                    InstallStatusChip(status = inst.status)
 
-                                if (inst.status == "installed") {
-                                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
-                                    Text(
-                                        text = "Installed: ${formatDate(inst.installedAt)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(
-                                            alpha = AppAlpha.SecondaryText
+                                    if (
+                                        inst.status == InstallationStatus.INSTALLED ||
+                                        inst.status == InstallationStatus.REPLACED
+                                    ) {
+                                        Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
+                                        Text(
+                                            text = "Installed: ${formatDate(inst.installedAt)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = secondaryColor
                                         )
-                                    )
-                                }
-                                inst.restoredAt?.let { restoredAt ->
-                                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
-                                    Text(
-                                        text = "Restored: ${formatDate(restoredAt)}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                            alpha = AppAlpha.SecondaryText
+                                    }
+                                    inst.restoredAt?.let { restoredAt ->
+                                        Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
+                                        Text(
+                                            text = "Restored: ${formatDate(restoredAt)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = secondaryColor
                                         )
-                                    )
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            // Classification card
-            item {
-                ClassificationCard(
-                    heroName = heroName,
-                    originalSkinName = originalSkinName,
-                    replacementSkinName = replacementSkinName,
-                    onEditClick = { showClassifyDialog = true },
-                    onClearClick = { viewModel.clearClassification() }
-                )
-            }
-
-            // Action buttons
-            item {
-                val isInstalled = installation?.status == "installed"
-                val canPrimaryAction =
-                    !isOperating && isShizukuReady && eligibleUserIds.isNotEmpty()
-                val canRestore = !isOperating && isShizukuReady &&
-                        installation?.status == "installed"
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(AppDimens.SpaceMd)
-                ) {
-                    Button(
-                        onClick = {
-                            if (isInstalled) viewModel.reinstall() else viewModel.install()
-                        },
-                        enabled = canPrimaryAction,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(if (isInstalled) "Reinstall" else "Install")
-                    }
-
-                    OutlinedButton(
-                        onClick = { viewModel.restore() },
-                        enabled = canRestore,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.tertiary
-                        )
-                    ) {
-                        Text("Restore")
-                    }
-                }
-
-                if (!isShizukuReady) {
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
-                    ) {
-                        Text(
-                            text = "⚠ Shizuku is not ready. Open Settings to connect.",
-                            modifier = Modifier.padding(AppDimens.SpaceMd),
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-
-                if (isShizukuReady && eligibleUserIds.isEmpty()) {
-                    Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
-                    ) {
-                        Text(
-                            text = "No Mobile Legends user found in /storage/emulated",
-                            modifier = Modifier.padding(AppDimens.SpaceMd),
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                }
-            }
-
-            // Progress indicator
-            val activeProgress = installProgress ?: restoreProgress
-            if (activeProgress != null && !activeProgress.isComplete && isOperating) {
+                // Classification card
                 item {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        LinearProgressIndicator(
-                            progress = {
-                                activeProgress.currentIndex.toFloat() / activeProgress.total.coerceAtLeast(
-                                    1
-                                )
+                    ClassificationCard(
+                        heroName = heroName,
+                        originalSkinName = originalSkinName,
+                        replacementSkinName = replacementSkinName,
+                        onEditClick = { showClassifyDialog = true },
+                        onClearClick = { viewModel.clearClassification() }
+                    )
+                }
+
+                // Action buttons
+                item {
+                    val status = installation?.status
+                    val isInstalled = status == InstallationStatus.INSTALLED
+                    val isReplaced = status == InstallationStatus.REPLACED
+                    val primaryActionLabel = if (isInstalled || isReplaced) "Reinstall" else "Install"
+                    val canPrimaryAction =
+                        !isOperating && !isRefreshing && isShizukuReady && eligibleUserIds.isNotEmpty()
+                    val canRestore = !isOperating && !isRefreshing && isShizukuReady &&
+                        status == InstallationStatus.INSTALLED
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(AppDimens.SpaceMd)
+                    ) {
+                        Button(
+                            onClick = {
+                                if (isInstalled) viewModel.reinstall() else viewModel.install()
                             },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
-                        Text(
-                            text = "${activeProgress.currentIndex} / ${activeProgress.total}: ${activeProgress.currentFileName}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            // File tree
-            item {
-                Text(
-                    text = "File Tree",
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-
-            items(flattenedTree, key = { it.id }) { node ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = node.isDirectory) {
-                            viewModel.toggleDirectory(node.id)
+                            enabled = canPrimaryAction,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(primaryActionLabel)
                         }
-                        .padding(start = (node.depth * 24).dp, top = AppDimens.SpaceXs, bottom = AppDimens.SpaceXs),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    val icon = when {
-                        !node.isDirectory -> Icons.AutoMirrored.Filled.InsertDriveFile
-                        node.id in expandedDirectoryIds -> Icons.Default.FolderOpen
-                        else -> Icons.Default.Folder
-                    }
-                    val iconTint = if (node.isDirectory)
-                        MaterialTheme.colorScheme.primary.copy(alpha = AppAlpha.SecondaryText)
-                    else
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.MutedText)
 
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        modifier = Modifier.size(AppDimens.IconSmall),
-                        tint = iconTint
-                    )
-                    Spacer(modifier = Modifier.width(AppDimens.SpaceSm))
+                        OutlinedButton(
+                            onClick = { viewModel.restore() },
+                            enabled = canRestore,
+                            modifier = Modifier.weight(1f),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.tertiary
+                            )
+                        ) {
+                            Text("Restore")
+                        }
+                    }
+
+                    if (isReplaced) {
+                        Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
+                        ) {
+                            Text(
+                                text = "Mobile Legends replaced one or more installed files. Restore is disabled. Reinstall this script to apply it again.",
+                                modifier = Modifier.padding(AppDimens.SpaceMd),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+
+                    if (!isShizukuReady) {
+                        Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
+                        ) {
+                            Text(
+                                text = "⚠ Shizuku is not ready. Open Settings to connect.",
+                                modifier = Modifier.padding(AppDimens.SpaceMd),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+
+                    if (isShizukuReady && eligibleUserIds.isEmpty()) {
+                        Spacer(modifier = Modifier.height(AppDimens.SpaceSm))
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            elevation = CardDefaults.cardElevation(defaultElevation = AppDimens.ElevationLow)
+                        ) {
+                            Text(
+                                text = "No Mobile Legends user found in /storage/emulated",
+                                modifier = Modifier.padding(AppDimens.SpaceMd),
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+
+                // Progress indicator
+                val activeProgress = installProgress ?: restoreProgress
+                if (activeProgress != null && !activeProgress.isComplete && isOperating) {
+                    item {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            LinearProgressIndicator(
+                                progress = {
+                                    activeProgress.currentIndex.toFloat() / activeProgress.total.coerceAtLeast(
+                                        1
+                                    )
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
+                            Text(
+                                text = "${activeProgress.currentIndex} / ${activeProgress.total}: ${activeProgress.currentFileName}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // File tree
+                item {
                     Text(
-                        text = node.name,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace
+                        text = "File Tree",
+                        style = MaterialTheme.typography.titleMedium
                     )
                 }
-            }
 
-            // Bottom spacer
-            item { Spacer(modifier = Modifier.height(AppDimens.SpaceLg)) }
+                items(flattenedTree, key = { it.id }) { node ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = node.isDirectory) {
+                                viewModel.toggleDirectory(node.id)
+                            }
+                            .padding(start = (node.depth * 24).dp, top = AppDimens.SpaceXs, bottom = AppDimens.SpaceXs),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        val icon = when {
+                            !node.isDirectory -> Icons.AutoMirrored.Filled.InsertDriveFile
+                            node.id in expandedDirectoryIds -> Icons.Default.FolderOpen
+                            else -> Icons.Default.Folder
+                        }
+                        val iconTint = if (node.isDirectory)
+                            MaterialTheme.colorScheme.primary.copy(alpha = AppAlpha.SecondaryText)
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = AppAlpha.MutedText)
+
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            modifier = Modifier.size(AppDimens.IconSmall),
+                            tint = iconTint
+                        )
+                        Spacer(modifier = Modifier.width(AppDimens.SpaceSm))
+                        Text(
+                            text = node.name,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                // Bottom spacer
+                item { Spacer(modifier = Modifier.height(AppDimens.SpaceLg)) }
+            }
         }
 
         if (showClassifyDialog) {

@@ -29,6 +29,11 @@ interface InstallationDao {
     )
     suspend fun getLatestByScriptIdAndUserId(scriptId: Long, userId: Int): Installation?
 
+    @Query(
+        "SELECT * FROM installations WHERE scriptId = :scriptId AND userId = :userId ORDER BY installedAt DESC, id DESC LIMIT 1"
+    )
+    fun observeLatestByScriptIdAndUserId(scriptId: Long, userId: Int): Flow<Installation?>
+
     @Query("SELECT * FROM installations WHERE id = :id")
     suspend fun getById(id: Long): Installation?
 
@@ -44,6 +49,13 @@ interface InstallationDao {
         ")"
     )
     fun getLatestInstallationsByUserId(userId: Int): Flow<List<Installation>>
+
+    @Query(
+        "SELECT * FROM installations WHERE id IN (" +
+            "SELECT MAX(id) FROM installations WHERE userId = :userId GROUP BY scriptId" +
+        ")"
+    )
+    suspend fun getLatestInstallationsByUserIdOnce(userId: Int): List<Installation>
 
     @Query(
         """

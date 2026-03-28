@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
+import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
@@ -16,6 +17,7 @@ import com.istarvin.skinscriptinstaller.domain.InstallProgress
 import com.istarvin.skinscriptinstaller.domain.InstallScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
+import com.istarvin.skinscriptinstaller.domain.VerifyInstalledScriptsUseCase
 import com.istarvin.skinscriptinstaller.service.InvalidPasswordException
 import com.istarvin.skinscriptinstaller.service.PasswordRequiredException
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
@@ -26,6 +28,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.io.File
@@ -52,6 +56,7 @@ data class InstallConflictWarningState(
 )
 
 @HiltViewModel
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ScriptDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: ScriptRepository,
@@ -60,6 +65,7 @@ class ScriptDetailViewModel @Inject constructor(
     private val installScriptUseCase: InstallScriptUseCase,
     private val restoreScriptUseCase: RestoreScriptUseCase,
     private val classifyScriptUseCase: ClassifyScriptUseCase,
+    private val verifyInstalledScriptsUseCase: VerifyInstalledScriptsUseCase,
     shizukuManager: ShizukuManager
 ) : ViewModel() {
 
@@ -86,6 +92,9 @@ class ScriptDetailViewModel @Inject constructor(
 
     private val _isImporting = MutableStateFlow(false)
     val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     private val _zipPasswordPrompt = MutableStateFlow<DetailZipPasswordPrompt?>(null)
     val zipPasswordPrompt: StateFlow<DetailZipPasswordPrompt?> = _zipPasswordPrompt.asStateFlow()
@@ -132,7 +141,26 @@ class ScriptDetailViewModel @Inject constructor(
     init {
         loadScript()
         observeActiveUser()
+        observeInstallation()
         userSelectionManager.observeFileService(viewModelScope)
+    }
+
+    private fun observeInstallation() {
+        viewModelScope.launch {
+            combine(_script, _selectedUserId) { script, selectedUserId ->
+                script?.id to selectedUserId
+            }
+                .flatMapLatest { (currentScriptId, selectedUserId) ->
+                    if (currentScriptId == null) {
+                        flowOf(null)
+                    } else {
+                        repository.observeLatestInstallation(currentScriptId, selectedUserId)
+                    }
+                }
+                .collectLatest { latestInstallation ->
+                    _installation.value = latestInstallation
+                }
+        }
     }
 
     private fun observeActiveUser() {
@@ -251,6 +279,34 @@ class ScriptDetailViewModel @Inject constructor(
         requestInstall(_selectedUserId.value)
     }
 
+    fun verifyCurrentInstallation() {
+        launchInstallationVerification(showRefreshing = false)
+    }
+
+    fun refreshInstallation() {
+        launchInstallationVerification(showRefreshing = true)
+    }
+
+    private fun launchInstallationVerification(showRefreshing: Boolean) {
+        val currentScriptId = _script.value?.id ?: return
+        if (_isOperating.value || _isImporting.value) {
+            return
+        }
+
+        viewModelScope.launch {
+            if (showRefreshing) {
+                _isRefreshing.value = true
+            }
+            try {
+                verifyInstalledScriptsUseCase.execute(currentScriptId, _selectedUserId.value)
+            } finally {
+                if (showRefreshing) {
+                    _isRefreshing.value = false
+                }
+            }
+        }
+    }
+
     fun installForUser(userId: Int) {
         if (userId !in userSelectionManager.eligibleUserIds.value) {
             _error.value = "Selected user is not eligible"
@@ -362,6 +418,10 @@ class ScriptDetailViewModel @Inject constructor(
     fun restore() {
         viewModelScope.launch {
             val inst = _installation.value ?: return@launch
+            if (inst.status == InstallationStatus.REPLACED) {
+                _error.value = "Restore is unavailable because Mobile Legends replaced this install"
+                return@launch
+            }
             _isOperating.value = true
             _error.value = null
             restoreScriptUseCase.resetProgress()
@@ -391,7 +451,7 @@ class ScriptDetailViewModel @Inject constructor(
             requireClassifiedScript() ?: return@launch
             val inst = repository.getLatestInstallation(scriptId, targetUserId)
 
-            if (inst == null || inst.status != "installed") {
+            if (inst == null || inst.status != InstallationStatus.INSTALLED) {
                 _error.value = "No installed version available to reinstall"
                 return@launch
             }
@@ -465,7 +525,7 @@ class ScriptDetailViewModel @Inject constructor(
 
         val targetUserId = _selectedUserId.value
         val activeInstallation = repository.getLatestInstallation(currentScript.id, targetUserId)
-        val wasInstalled = activeInstallation?.status == "installed"
+        val wasInstalled = activeInstallation?.status == InstallationStatus.INSTALLED
         val shouldReinstallAfterUpdate = pendingReinstallUserId == targetUserId || wasInstalled
 
         if (!shouldReinstallAfterUpdate) {

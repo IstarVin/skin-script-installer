@@ -4,6 +4,7 @@ import android.net.Uri
 import com.istarvin.skinscriptinstaller.IFileService
 import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
+import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
@@ -11,6 +12,7 @@ import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
+import com.istarvin.skinscriptinstaller.domain.VerifyInstalledScriptsUseCase
 import com.istarvin.skinscriptinstaller.service.InvalidPasswordException
 import com.istarvin.skinscriptinstaller.service.PasswordRequiredException
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
@@ -33,6 +35,7 @@ class ScriptListViewModelTest {
     private lateinit var importScriptUseCase: ImportScriptUseCase
     private lateinit var restoreScriptUseCase: RestoreScriptUseCase
     private lateinit var fetchHeroCatalogUseCase: FetchHeroCatalogUseCase
+    private lateinit var verifyInstalledScriptsUseCase: VerifyInstalledScriptsUseCase
     private lateinit var activeUserStore: ActiveUserStore
     private lateinit var shizukuManager: ShizukuManager
     private lateinit var userSelectionManager: UserSelectionManager
@@ -51,6 +54,7 @@ class ScriptListViewModelTest {
         importScriptUseCase = mockk(relaxed = true)
         restoreScriptUseCase = mockk(relaxed = true)
         fetchHeroCatalogUseCase = mockk(relaxed = true)
+        verifyInstalledScriptsUseCase = mockk(relaxed = true)
         activeUserStore = mockk(relaxed = true)
         shizukuManager = mockk(relaxed = true)
 
@@ -75,8 +79,20 @@ class ScriptListViewModelTest {
             importScriptUseCase,
             restoreScriptUseCase,
             userSelectionManager,
-            fetchHeroCatalogUseCase
+            fetchHeroCatalogUseCase,
+            verifyInstalledScriptsUseCase
         )
+    }
+
+    @Test
+    fun `refreshInstalledScripts runs verification use case`() = runTest {
+        createViewModel()
+
+        viewModel.refreshInstalledScripts()
+        advanceUntilIdle()
+
+        coVerify { verifyInstalledScriptsUseCase.execute() }
+        assertFalse(viewModel.isRefreshing.value)
     }
 
     @Test
@@ -86,7 +102,7 @@ class ScriptListViewModelTest {
             SkinScript(id = 2L, name = "Script 2", storagePath = "/path/2")
         )
         val installations = listOf(
-            Installation(id = 10L, scriptId = 1L, userId = 0, status = "installed")
+            Installation(id = 10L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
         )
         every { repository.getAllScripts() } returns flowOf(scripts)
         every { repository.getLatestInstallations(0) } returns flowOf(installations)
@@ -100,8 +116,8 @@ class ScriptListViewModelTest {
 
         val result = viewModel.scriptsWithStatus.value
         assertEquals(2, result.size)
-        assertEquals("installed", result[0].status)
-        assertEquals("not_installed", result[1].status)
+        assertEquals(InstallationStatus.INSTALLED, result[0].status)
+        assertEquals(InstallationStatus.NOT_INSTALLED, result[1].status)
 
         collectJob.cancel()
     }
@@ -133,6 +149,7 @@ class ScriptListViewModelTest {
         assertEquals(listOf("Miya", "Layla", "Uncategorized"), result.map { it.title })
         assertTrue(result.all { !it.isExpanded })
         assertTrue(result.all { !it.hasInstalledScript })
+        assertTrue(result.all { !it.hasReplacedScript })
         assertEquals(listOf(1L), result[0].skinReplacementSections.single().scripts.map { it.script.id })
         assertEquals(listOf(2L), result[1].skinReplacementSections.single().scripts.map { it.script.id })
         assertEquals(listOf(3L), result[2].flatScripts.map { it.script.id })
@@ -151,8 +168,8 @@ class ScriptListViewModelTest {
             SkinScript(id = 2L, name = "Layla Basic", storagePath = "/path/2", heroId = 2L)
         )
         val installations = listOf(
-            Installation(id = 10L, scriptId = 1L, userId = 0, status = "installed"),
-            Installation(id = 11L, scriptId = 2L, userId = 0, status = "restored")
+            Installation(id = 10L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED),
+            Installation(id = 11L, scriptId = 2L, userId = 0, status = InstallationStatus.RESTORED)
         )
 
         every { repository.getAllHeroes() } returns flowOf(heroes)
@@ -170,6 +187,36 @@ class ScriptListViewModelTest {
         assertEquals(listOf("Miya", "Layla"), result.map { it.title })
         assertTrue(result.first { it.title == "Miya" }.hasInstalledScript)
         assertFalse(result.first { it.title == "Layla" }.hasInstalledScript)
+        assertFalse(result.any { it.hasReplacedScript })
+
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `heroScriptSections marks heroes with replaced script warning`() = runTest {
+        val heroes = listOf(Hero(id = 1L, name = "Miya"))
+        val scripts = listOf(
+            SkinScript(id = 1L, name = "Miya Epic", storagePath = "/path/1", heroId = 1L)
+        )
+        val installations = listOf(
+            Installation(id = 10L, scriptId = 1L, userId = 0, status = InstallationStatus.REPLACED)
+        )
+
+        every { repository.getAllHeroes() } returns flowOf(heroes)
+        every { repository.getAllScripts() } returns flowOf(scripts)
+        every { repository.getLatestInstallations(0) } returns flowOf(installations)
+
+        createViewModel()
+
+        val collectJob = launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.heroScriptSections.collect {}
+        }
+        advanceUntilIdle()
+
+        val result = viewModel.heroScriptSections.value
+        assertEquals(1, result.size)
+        assertTrue(result.single().hasReplacedScript)
+        assertFalse(result.single().hasInstalledScript)
 
         collectJob.cancel()
     }

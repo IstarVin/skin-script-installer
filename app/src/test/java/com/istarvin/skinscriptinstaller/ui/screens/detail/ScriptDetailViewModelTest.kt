@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import com.istarvin.skinscriptinstaller.IFileService
 import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
+import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
@@ -14,6 +15,7 @@ import com.istarvin.skinscriptinstaller.domain.InstallProgress
 import com.istarvin.skinscriptinstaller.domain.InstallScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
+import com.istarvin.skinscriptinstaller.domain.VerifyInstalledScriptsUseCase
 import com.istarvin.skinscriptinstaller.service.ShizukuManager
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +46,7 @@ class ScriptDetailViewModelTest {
     private lateinit var installScriptUseCase: InstallScriptUseCase
     private lateinit var restoreScriptUseCase: RestoreScriptUseCase
     private lateinit var classifyScriptUseCase: ClassifyScriptUseCase
+    private lateinit var verifyInstalledScriptsUseCase: VerifyInstalledScriptsUseCase
     private lateinit var shizukuManager: ShizukuManager
 
     private val activeUserIdFlow = MutableStateFlow(0)
@@ -65,6 +68,7 @@ class ScriptDetailViewModelTest {
         installScriptUseCase = mockk(relaxed = true)
         restoreScriptUseCase = mockk(relaxed = true)
         classifyScriptUseCase = mockk(relaxed = true)
+        verifyInstalledScriptsUseCase = mockk(relaxed = true)
         shizukuManager = mockk(relaxed = true)
 
         every { activeUserStore.activeUserId } returns activeUserIdFlow
@@ -73,6 +77,7 @@ class ScriptDetailViewModelTest {
         every { installScriptUseCase.progress } returns installProgressFlow
         every { restoreScriptUseCase.progress } returns restoreProgressFlow
         every { repository.getAllHeroes() } returns flowOf(emptyList())
+        every { repository.observeLatestInstallation(any(), any()) } returns flowOf(null)
         coEvery { repository.getActiveHeroInstallationConflicts(any(), any(), any()) } returns emptyList()
 
         userSelectionManager = UserSelectionManager(activeUserStore, shizukuManager)
@@ -90,7 +95,7 @@ class ScriptDetailViewModelTest {
         return ScriptDetailViewModel(
             savedStateHandle, repository, userSelectionManager,
             importScriptUseCase, installScriptUseCase, restoreScriptUseCase,
-            classifyScriptUseCase, shizukuManager
+            classifyScriptUseCase, verifyInstalledScriptsUseCase, shizukuManager
         )
     }
 
@@ -193,7 +198,8 @@ class ScriptDetailViewModelTest {
         every { fileService.listEligibleMlUserIds() } returns intArrayOf(0)
         fileServiceFlow.value = fileService
 
-        val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = "installed")
+        val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
+        every { repository.observeLatestInstallation(1L, 0) } returns flowOf(installation)
         coEvery { installScriptUseCase.execute(1L, 0) } answers { Result.success(installation) }
 
         val vm = createViewModel()
@@ -204,6 +210,35 @@ class ScriptDetailViewModelTest {
 
         coVerify { installScriptUseCase.execute(1L, 0) }
         assertEquals(installation, vm.installation.value)
+    }
+
+    @Test
+    fun `verifyCurrentInstallation triggers targeted verification for selected user`() = runTest {
+        val script = SkinScript(id = 1L, name = "Test", storagePath = tempFolder.root.absolutePath)
+        coEvery { repository.getScriptById(1L) } returns script
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.verifyCurrentInstallation()
+        advanceUntilIdle()
+
+        coVerify { verifyInstalledScriptsUseCase.execute(1L, 0) }
+    }
+
+    @Test
+    fun `refreshInstallation runs targeted verification and clears refreshing state`() = runTest {
+        val script = SkinScript(id = 1L, name = "Test", storagePath = tempFolder.root.absolutePath)
+        coEvery { repository.getScriptById(1L) } returns script
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.refreshInstallation()
+        advanceUntilIdle()
+
+        coVerify { verifyInstalledScriptsUseCase.execute(1L, 0) }
+        assertFalse(vm.isRefreshing.value)
     }
 
     @Test
@@ -361,7 +396,8 @@ class ScriptDetailViewModelTest {
                 scriptName = "Older Miya"
             )
         )
-        val newInstallation = Installation(id = 30L, scriptId = 1L, userId = 0, status = "installed")
+        val newInstallation = Installation(id = 30L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
+        every { repository.observeLatestInstallation(1L, 0) } returns flowOf(newInstallation)
         coEvery { repository.getScriptById(1L) } returns script
         coEvery { repository.getHeroById(1L) } returns Hero(id = 1L, name = "Miya")
         coEvery { repository.getActiveHeroInstallationConflicts(1L, 0, 1L) } returns conflicts
@@ -432,22 +468,23 @@ class ScriptDetailViewModelTest {
     @Test
     fun `restore calls RestoreScriptUseCase and reloads installation`() = runTest {
         val script = SkinScript(id = 1L, name = "Test", storagePath = tempFolder.root.absolutePath)
-        val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = "installed")
-        val restored = installation.copy(status = "restored")
+        val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
+        val restored = installation.copy(status = InstallationStatus.RESTORED)
         coEvery { repository.getScriptById(1L) } returns script
+        every { repository.observeLatestInstallation(1L, 0) } returns MutableStateFlow(installation)
         // First call during init returns "installed", second call after restore returns "restored"
         coEvery { repository.getLatestInstallation(1L, 0) } returnsMany listOf(installation, restored)
         coEvery { restoreScriptUseCase.execute(10L) } answers { Result.success(Unit) }
 
         val vm = createViewModel()
         advanceUntilIdle()
-        assertEquals("installed", vm.installation.value?.status)
+        assertEquals(InstallationStatus.INSTALLED, vm.installation.value?.status)
 
         vm.restore()
         advanceUntilIdle()
 
         coVerify { restoreScriptUseCase.execute(10L) }
-        assertEquals("restored", vm.installation.value?.status)
+        assertEquals(InstallationStatus.RESTORED, vm.installation.value?.status)
     }
 
     @Test
@@ -458,12 +495,13 @@ class ScriptDetailViewModelTest {
             storagePath = tempFolder.root.absolutePath,
             heroId = 1L
         )
-        val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = "installed")
+        val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
         coEvery { repository.getScriptById(1L) } returns script
         coEvery { repository.getLatestInstallation(1L, 0) } returns installation
+        every { repository.observeLatestInstallation(1L, 0) } returns flowOf(installation)
         coEvery { restoreScriptUseCase.execute(10L) } answers { Result.success(Unit) }
 
-        val newInstallation = Installation(id = 11L, scriptId = 1L, userId = 0, status = "installed")
+        val newInstallation = Installation(id = 11L, scriptId = 1L, userId = 0, status = InstallationStatus.INSTALLED)
         coEvery { installScriptUseCase.execute(1L, 0) } answers { Result.success(newInstallation) }
 
         val fileService = mockk<IFileService>(relaxed = true)
@@ -505,6 +543,26 @@ class ScriptDetailViewModelTest {
 
         assertNotNull(vm.error.value)
         assertTrue(vm.error.value!!.contains("No installed version"))
+    }
+
+    @Test
+    fun `restore blocks replaced installations`() = runTest {
+        val script = SkinScript(id = 1L, name = "Test", storagePath = tempFolder.root.absolutePath)
+        val installation = Installation(id = 10L, scriptId = 1L, userId = 0, status = InstallationStatus.REPLACED)
+        coEvery { repository.getScriptById(1L) } returns script
+        every { repository.observeLatestInstallation(1L, 0) } returns flowOf(installation)
+
+        val vm = createViewModel()
+        advanceUntilIdle()
+
+        vm.restore()
+        advanceUntilIdle()
+
+        assertEquals(
+            "Restore is unavailable because Mobile Legends replaced this install",
+            vm.error.value
+        )
+        coVerify(exactly = 0) { restoreScriptUseCase.execute(any()) }
     }
 
     @Test

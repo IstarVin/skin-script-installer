@@ -53,6 +53,9 @@ class ScriptRepository @Inject constructor(
     suspend fun getLatestInstallation(scriptId: Long, userId: Int): Installation? =
         installationDao.getLatestByScriptIdAndUserId(scriptId, userId)
 
+    fun observeLatestInstallation(scriptId: Long, userId: Int): Flow<Installation?> =
+        installationDao.observeLatestByScriptIdAndUserId(scriptId, userId)
+
     suspend fun getInstallationById(id: Long): Installation? =
         installationDao.getById(id)
 
@@ -72,6 +75,9 @@ class ScriptRepository @Inject constructor(
 
     fun getLatestInstallations(userId: Int): Flow<List<Installation>> =
         installationDao.getLatestInstallationsByUserId(userId)
+
+    suspend fun getLatestInstallationsOnce(userId: Int): List<Installation> =
+        installationDao.getLatestInstallationsByUserIdOnce(userId)
 
     suspend fun getLatestInstalledScriptsByUserId(userId: Int): List<LatestInstalledScript> =
         installationDao.getLatestInstalledScriptsByUserId(userId)

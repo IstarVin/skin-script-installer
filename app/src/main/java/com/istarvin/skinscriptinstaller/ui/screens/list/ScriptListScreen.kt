@@ -55,6 +55,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -68,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil3.compose.AsyncImage
+import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.ui.components.AppEmptyState
 import com.istarvin.skinscriptinstaller.ui.components.CollapsibleSection
 import com.istarvin.skinscriptinstaller.ui.components.DeleteScriptDialog
@@ -91,6 +93,7 @@ fun ScriptListScreen(
     val eligibleUserIds by viewModel.eligibleUserIds.collectAsState()
     val activeUserId by viewModel.activeUserId.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
+    val isRefreshing by viewModel.isRefreshing.collectAsState()
     val importError by viewModel.importError.collectAsState()
     val zipPasswordPrompt by viewModel.zipPasswordPrompt.collectAsState()
     val pendingClassificationScriptId by viewModel.pendingClassificationScriptId.collectAsState()
@@ -184,95 +187,101 @@ fun ScriptListScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        Column(
+        PullToRefreshBox(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(padding),
+            isRefreshing = isRefreshing,
+            onRefresh = viewModel::refreshInstalledScripts
         ) {
-            if (eligibleUserIds.size > 1) {
-                ActiveUserSelector(
-                    eligibleUserIds = eligibleUserIds,
-                    activeUserId = activeUserId,
-                    onUserSelected = viewModel::selectActiveUser,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            horizontal = AppDimens.ScreenHorizontal,
-                            vertical = AppDimens.SpaceSm
-                        )
-                )
-            }
-
-            AnimatedVisibility(
-                visible = showSearchField,
-                enter = fadeIn(animationSpec = tween(durationMillis = 180)) +
-                    slideInVertically(
-                        animationSpec = tween(durationMillis = 220),
-                        initialOffsetY = { -it / 2 }
-                    ),
-                exit = fadeOut(animationSpec = tween(durationMillis = 120)) +
-                    slideOutVertically(
-                        animationSpec = tween(durationMillis = 180),
-                        targetOffsetY = { -it / 2 }
-                    )
+            Column(
+                modifier = Modifier.fillMaxSize()
             ) {
-                HeroSearchField(
-                    query = searchQuery,
-                    onQueryChange = viewModel::updateSearchQuery,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            horizontal = AppDimens.ScreenHorizontal,
-                            vertical = AppDimens.SpaceSm
-                        )
-                )
-            }
+                if (eligibleUserIds.size > 1) {
+                    ActiveUserSelector(
+                        eligibleUserIds = eligibleUserIds,
+                        activeUserId = activeUserId,
+                        onUserSelected = viewModel::selectActiveUser,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = AppDimens.ScreenHorizontal,
+                                vertical = AppDimens.SpaceSm
+                            )
+                    )
+                }
 
-            if (heroScriptSections.isEmpty() && !isImporting && scriptsWithStatus.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = AppDimens.ScreenHorizontal),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AppEmptyState(
-                        icon = Icons.Outlined.FolderOpen,
-                        title = "No scripts imported",
-                        subtitle = "Import a skin script folder or ZIP to get started",
-                        actionLabel = "Import Script",
-                        onActionClick = {
-                            showImportChoiceDialog = true
-                        }
-                    )
-                }
-            } else if (heroScriptSections.isEmpty() && !isImporting) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = AppDimens.ScreenHorizontal),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AppEmptyState(
-                        icon = Icons.Default.Search,
-                        title = "No heroes found",
-                        subtitle = "Try a different hero name"
-                    )
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = AppDimens.SpaceXs),
-                    verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceSm),
-                    contentPadding = PaddingValues(AppDimens.ScreenHorizontal)
-                ) {
-                    items(heroScriptSections, key = { it.key }) { section ->
-                        HeroScriptAccordionSection(
-                            section = section,
-                            onToggle = viewModel::toggleSection,
-                            onScriptClick = onScriptClick,
-                            onDeleteClick = { scriptToDelete = it }
+                AnimatedVisibility(
+                    visible = showSearchField,
+                    enter = fadeIn(animationSpec = tween(durationMillis = 180)) +
+                        slideInVertically(
+                            animationSpec = tween(durationMillis = 220),
+                            initialOffsetY = { -it / 2 }
+                        ),
+                    exit = fadeOut(animationSpec = tween(durationMillis = 120)) +
+                        slideOutVertically(
+                            animationSpec = tween(durationMillis = 180),
+                            targetOffsetY = { -it / 2 }
                         )
+                ) {
+                    HeroSearchField(
+                        query = searchQuery,
+                        onQueryChange = viewModel::updateSearchQuery,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = AppDimens.ScreenHorizontal,
+                                vertical = AppDimens.SpaceSm
+                            )
+                    )
+                }
+
+                if (heroScriptSections.isEmpty() && !isImporting && scriptsWithStatus.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = AppDimens.ScreenHorizontal),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AppEmptyState(
+                            icon = Icons.Outlined.FolderOpen,
+                            title = "No scripts imported",
+                            subtitle = "Import a skin script folder or ZIP to get started",
+                            actionLabel = "Import Script",
+                            onActionClick = {
+                                showImportChoiceDialog = true
+                            }
+                        )
+                    }
+                } else if (heroScriptSections.isEmpty() && !isImporting) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = AppDimens.ScreenHorizontal),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        AppEmptyState(
+                            icon = Icons.Default.Search,
+                            title = "No heroes found",
+                            subtitle = "Try a different hero name"
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = AppDimens.SpaceXs),
+                        verticalArrangement = Arrangement.spacedBy(AppDimens.SpaceSm),
+                        contentPadding = PaddingValues(AppDimens.ScreenHorizontal)
+                    ) {
+                        items(heroScriptSections, key = { it.key }) { section ->
+                            HeroScriptAccordionSection(
+                                section = section,
+                                onToggle = viewModel::toggleSection,
+                                onScriptClick = onScriptClick,
+                                onDeleteClick = { scriptToDelete = it }
+                            )
+                        }
                     }
                 }
             }
@@ -323,7 +332,7 @@ fun ScriptListScreen(
         scriptToDelete?.let { item ->
             DeleteScriptDialog(
                 scriptName = item.script.name,
-                isInstalled = item.status == "installed",
+                isInstalled = item.status == InstallationStatus.INSTALLED,
                 onDeleteWithRestore = {
                     viewModel.deleteScript(item.script, restoreBeforeDelete = true)
                     scriptToDelete = null
@@ -496,9 +505,18 @@ private fun HeroScriptAccordionSection(
                 Spacer(modifier = Modifier.width(AppDimens.SpaceMd))
             }
         } else null,
-        titleSuffix = if (!section.isFlat && section.hasInstalledScript) {
-            { HeroInstalledIndicator() }
-        } else null
+        titleSuffix = when {
+            section.isFlat -> null
+            section.hasReplacedScript -> {
+                { HeroNeedsReinstallIndicator() }
+            }
+
+            section.hasInstalledScript -> {
+                { HeroInstalledIndicator() }
+            }
+
+            else -> null
+        }
     ) {
         if (section.isFlat) {
             section.flatScripts.forEach { item ->
@@ -584,6 +602,43 @@ private fun HeroInstalledIndicator(
                 text = "Installed",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@Composable
+private fun HeroNeedsReinstallIndicator(
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.error.copy(alpha = AppAlpha.ChipContainer)
+    ) {
+        Row(
+            modifier = Modifier.padding(
+                horizontal = AppDimens.SpaceSm,
+                vertical = AppDimens.SpaceXs
+            ),
+            horizontalArrangement = Arrangement.spacedBy(AppDimens.SpaceXs),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.error)
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = CircleShape
+                    )
+            )
+            Text(
+                text = "Needs Reinstall",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error
             )
         }
     }

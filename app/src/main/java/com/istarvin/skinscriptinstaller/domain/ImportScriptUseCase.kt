@@ -34,8 +34,6 @@ class ImportScriptUseCase @Inject constructor(
     private val archiveService: ArchiveService
 ) {
     companion object {
-        private const val ML_ASSETS_PREFIX =
-            "Android/data/com.mobile.legends/files/dragon2017/assets"
         private const val MISSING_ART_ERROR =
             "Invalid script: expected an Art folder in the selected content"
     }
@@ -144,7 +142,7 @@ class ImportScriptUseCase @Inject constructor(
         when (structureInfo.type) {
             StructureType.FULL_PATH -> copyDocumentTree(rootDoc, scriptDir)
             StructureType.ART_FOLDER -> {
-                val destAssetsDir = File(scriptDir, ML_ASSETS_PREFIX)
+                val destAssetsDir = File(scriptDir, ML_ASSETS_RELATIVE_PATH)
                 destAssetsDir.mkdirs()
                 val sourceDoc = structureInfo.artParentDoc ?: rootDoc
                 copyDocumentTree(sourceDoc, destAssetsDir)
@@ -180,7 +178,7 @@ class ImportScriptUseCase @Inject constructor(
             }
 
             StructureType.ART_FOLDER -> {
-                val destAssetsDir = File(scriptDir, ML_ASSETS_PREFIX)
+                val destAssetsDir = File(scriptDir, ML_ASSETS_RELATIVE_PATH)
                 destAssetsDir.mkdirs()
                 val sourceDir = structureInfo.artParentDir ?: rootDir
                 copyFileTree(sourceDir, destAssetsDir)

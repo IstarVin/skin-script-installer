@@ -5,12 +5,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
+import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.UserSelectionManager
+import com.istarvin.skinscriptinstaller.domain.VerifyInstalledScriptsUseCase
 import com.istarvin.skinscriptinstaller.service.InvalidPasswordException
 import com.istarvin.skinscriptinstaller.service.PasswordRequiredException
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -38,7 +40,7 @@ data class ScriptWithStatus(
     val replacementSkinName: String? = null
 ) {
     val status: String
-        get() = latestInstallation?.status ?: "not_installed"
+        get() = latestInstallation?.status ?: InstallationStatus.NOT_INSTALLED
 
     val isClassified: Boolean
         get() = heroName != null
@@ -75,7 +77,8 @@ data class HeroScriptGroup(
     val skinReplacementGroups: List<SkinReplacementGroup> = emptyList(),
     val flatScripts: List<ScriptWithStatus> = emptyList(),
     val isFlat: Boolean = false,
-    val hasInstalledScript: Boolean = false
+    val hasInstalledScript: Boolean = false,
+    val hasReplacedScript: Boolean = false
 ) {
     val count: Int
         get() = if (isFlat) flatScripts.size else skinReplacementGroups.sumOf { it.count }
@@ -89,6 +92,7 @@ data class HeroScriptSection(
     val flatScripts: List<ScriptWithStatus> = emptyList(),
     val isFlat: Boolean = false,
     val hasInstalledScript: Boolean = false,
+    val hasReplacedScript: Boolean = false,
     val isExpanded: Boolean
 ) {
     val count: Int
@@ -102,7 +106,8 @@ class ScriptListViewModel @Inject constructor(
     private val importScriptUseCase: ImportScriptUseCase,
     private val restoreScriptUseCase: RestoreScriptUseCase,
     private val userSelectionManager: UserSelectionManager,
-    private val fetchHeroCatalogUseCase: FetchHeroCatalogUseCase
+    private val fetchHeroCatalogUseCase: FetchHeroCatalogUseCase,
+    private val verifyInstalledScriptsUseCase: VerifyInstalledScriptsUseCase
 ) : ViewModel() {
 
     private var didInitializeExpandedSections = false
@@ -184,6 +189,7 @@ class ScriptListViewModel @Inject constructor(
                 flatScripts = group.flatScripts,
                 isFlat = group.isFlat,
                 hasInstalledScript = group.hasInstalledScript,
+                hasReplacedScript = group.hasReplacedScript,
                 isExpanded = group.key in expandedKeys
             )
             }
@@ -195,6 +201,9 @@ class ScriptListViewModel @Inject constructor(
 
     private val _isImporting = MutableStateFlow(false)
     val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
+
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
     private val _zipPasswordPrompt = MutableStateFlow<ZipPasswordPrompt?>(null)
     val zipPasswordPrompt: StateFlow<ZipPasswordPrompt?> = _zipPasswordPrompt.asStateFlow()
@@ -278,6 +287,21 @@ class ScriptListViewModel @Inject constructor(
         importZipInternal(zipUri, password = null)
     }
 
+    fun refreshInstalledScripts() {
+        if (_isImporting.value || _isRefreshing.value) {
+            return
+        }
+
+        viewModelScope.launch {
+            _isRefreshing.value = true
+            try {
+                verifyInstalledScriptsUseCase.execute()
+            } finally {
+                _isRefreshing.value = false
+            }
+        }
+    }
+
     fun retryZipWithPassword(password: String) {
         val prompt = _zipPasswordPrompt.value ?: return
         importZipInternal(prompt.zipUri, password.toCharArray())
@@ -330,7 +354,7 @@ class ScriptListViewModel @Inject constructor(
 
             if (restoreBeforeDelete) {
                 val latestInstallation = repository.getLatestInstallation(script.id, userSelectionManager.activeUserId.value)
-                if (latestInstallation == null || latestInstallation.status != "installed") {
+                if (latestInstallation == null || latestInstallation.status != InstallationStatus.INSTALLED) {
                     _importError.value = "No active installation found to restore"
                     return@launch
                 }
@@ -376,7 +400,12 @@ class ScriptListViewModel @Inject constructor(
                         heroIcon = null,
                         flatScripts = scriptsForHero,
                         isFlat = true,
-                        hasInstalledScript = scriptsForHero.any { it.status == "installed" }
+                        hasInstalledScript = scriptsForHero.any {
+                            it.status == InstallationStatus.INSTALLED
+                        },
+                        hasReplacedScript = scriptsForHero.any {
+                            it.status == InstallationStatus.REPLACED
+                        }
                     )
                 } else {
                     val replacementGroups = scriptsForHero
@@ -395,7 +424,12 @@ class ScriptListViewModel @Inject constructor(
                         heroIcon = scriptsForHero.firstOrNull()?.heroIcon,
                         skinReplacementGroups = replacementGroups,
                         isFlat = false,
-                        hasInstalledScript = scriptsForHero.any { it.status == "installed" }
+                        hasInstalledScript = scriptsForHero.any {
+                            it.status == InstallationStatus.INSTALLED
+                        },
+                        hasReplacedScript = scriptsForHero.any {
+                            it.status == InstallationStatus.REPLACED
+                        }
                     )
                 }
             }
