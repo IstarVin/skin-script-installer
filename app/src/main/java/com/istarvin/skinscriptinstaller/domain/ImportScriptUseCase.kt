@@ -21,21 +21,6 @@ data class ImportedScriptPayload(
     val storagePath: String
 )
 
-enum class ImportConflictResolutionChoice {
-    KEEP_EXISTING,
-    USE_IMPORTED
-}
-
-data class ImportConflictScriptRef(
-    val scriptId: Long,
-    val scriptName: String
-)
-
-data class ImportFileConflict(
-    val relativePath: String,
-    val existingScripts: List<ImportConflictScriptRef>
-)
-
 /**
  * Imports a skin script folder from SAF into internal storage.
  *
@@ -58,7 +43,14 @@ class ImportScriptUseCase @Inject constructor(
             val preparedImport = prepareTreeImport(treeUri).getOrElse {
                 return@withContext Result.failure(it)
             }
-            persistPreparedImport(preparedImport)
+            val script = SkinScript(
+                name = preparedImport.name,
+                storagePath = preparedImport.storagePath
+            )
+            val insertedId = repository.insertScript(script)
+            val insertedScript = script.copy(id = insertedId)
+
+            Result.success(insertedScript)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -70,15 +62,6 @@ class ImportScriptUseCase @Inject constructor(
                 val preparedImport = prepareZipImport(zipUri, password).getOrElse {
                     return@withContext Result.failure(it)
                 }
-                persistPreparedImport(preparedImport)
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
-        }
-
-    suspend fun persistPreparedImport(preparedImport: ImportedScriptPayload): Result<SkinScript> =
-        withContext(Dispatchers.IO) {
-            try {
                 val script = SkinScript(
                     name = preparedImport.name,
                     storagePath = preparedImport.storagePath
@@ -89,130 +72,6 @@ class ImportScriptUseCase @Inject constructor(
                 Result.failure(e)
             }
         }
-
-    suspend fun cleanupPreparedImport(preparedImport: ImportedScriptPayload) =
-        withContext(Dispatchers.IO) {
-            val scriptDir = File(preparedImport.storagePath)
-            if (scriptDir.exists()) {
-                scriptDir.deleteRecursively()
-            }
-        }
-
-    suspend fun detectFileConflicts(
-        preparedImport: ImportedScriptPayload,
-        excludeScriptId: Long? = null
-    ): Result<List<ImportFileConflict>> = withContext(Dispatchers.IO) {
-        try {
-            val importedAssetsDir = resolveImportedAssetsDir(preparedImport.storagePath)
-            if (!importedAssetsDir.exists() || !importedAssetsDir.isDirectory) {
-                return@withContext Result.failure(
-                    IllegalArgumentException(
-                        "Prepared import has no assets directory at: ${importedAssetsDir.path}"
-                    )
-                )
-            }
-
-            val importedRelativePaths = collectRelativeFilePaths(importedAssetsDir)
-            if (importedRelativePaths.isEmpty()) {
-                return@withContext Result.success(emptyList())
-            }
-
-            val pathToExistingScripts = mutableMapOf<String, MutableList<ImportConflictScriptRef>>()
-            val existingScripts = repository.getAllScriptsOnce()
-                .asSequence()
-                .filter { script -> excludeScriptId == null || script.id != excludeScriptId }
-                .toList()
-
-            for (existingScript in existingScripts) {
-                val existingAssetsDir = resolveImportedAssetsDir(existingScript.storagePath)
-                if (!existingAssetsDir.exists() || !existingAssetsDir.isDirectory) {
-                    continue
-                }
-
-                val existingRelativePaths = collectRelativeFilePaths(existingAssetsDir)
-                for (relativePath in existingRelativePaths) {
-                    if (relativePath !in importedRelativePaths) {
-                        continue
-                    }
-                    val refs = pathToExistingScripts.getOrPut(relativePath) { mutableListOf() }
-                    refs.add(
-                        ImportConflictScriptRef(
-                            scriptId = existingScript.id,
-                            scriptName = existingScript.name
-                        )
-                    )
-                }
-            }
-
-            val conflicts = importedRelativePaths
-                .sorted()
-                .mapNotNull { relativePath ->
-                    val refs = pathToExistingScripts[relativePath]
-                    if (refs.isNullOrEmpty()) {
-                        null
-                    } else {
-                        ImportFileConflict(
-                            relativePath = relativePath,
-                            existingScripts = refs.sortedBy { it.scriptName.lowercase() }
-                        )
-                    }
-                }
-
-            Result.success(conflicts)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
-
-    suspend fun applyConflictChoices(
-        preparedImport: ImportedScriptPayload,
-        conflicts: List<ImportFileConflict>,
-        choices: Map<String, ImportConflictResolutionChoice>
-    ): Result<ImportedScriptPayload> = withContext(Dispatchers.IO) {
-        try {
-            if (conflicts.isEmpty()) {
-                return@withContext Result.success(preparedImport)
-            }
-
-            val importedAssetsDir = resolveImportedAssetsDir(preparedImport.storagePath)
-            if (!importedAssetsDir.exists() || !importedAssetsDir.isDirectory) {
-                return@withContext Result.failure(
-                    IllegalArgumentException(
-                        "Prepared import has no assets directory at: ${importedAssetsDir.path}"
-                    )
-                )
-            }
-
-            for (conflict in conflicts) {
-                when (choices[conflict.relativePath] ?: ImportConflictResolutionChoice.KEEP_EXISTING) {
-                    ImportConflictResolutionChoice.KEEP_EXISTING -> {
-                        deleteFileByRelativePath(importedAssetsDir, conflict.relativePath)
-                    }
-
-                    ImportConflictResolutionChoice.USE_IMPORTED -> {
-                        for (existingScriptRef in conflict.existingScripts) {
-                            val existingScript = repository.getScriptById(existingScriptRef.scriptId)
-                                ?: continue
-                            val existingAssetsDir = resolveImportedAssetsDir(existingScript.storagePath)
-                            deleteFileByRelativePath(existingAssetsDir, conflict.relativePath)
-                        }
-                    }
-                }
-            }
-
-            if (!containsAtLeastOneFile(importedAssetsDir)) {
-                return@withContext Result.failure(
-                    IllegalStateException(
-                        "All conflicting files were skipped. Nothing left to import"
-                    )
-                )
-            }
-
-            Result.success(preparedImport)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
-    }
 
     suspend fun prepareTreeImport(treeUri: Uri): Result<ImportedScriptPayload> =
         withContext(Dispatchers.IO) {
@@ -459,68 +318,6 @@ class ImportScriptUseCase @Inject constructor(
                 }
             }
         }
-    }
-
-    private fun collectRelativeFilePaths(rootDir: File): Set<String> {
-        if (!rootDir.exists() || !rootDir.isDirectory) {
-            return emptySet()
-        }
-
-        return rootDir.walkTopDown()
-            .filter { it.isFile }
-            .map { file -> file.relativeTo(rootDir).invariantSeparatorsPath }
-            .toSet()
-    }
-
-    private fun deleteFileByRelativePath(rootDir: File, relativePath: String) {
-        val target = resolvePathInsideRoot(rootDir, relativePath) ?: return
-        if (!target.exists() || !target.isFile) {
-            return
-        }
-
-        if (!target.delete()) {
-            throw IOException("Failed to delete conflict file: ${target.path}")
-        }
-
-        pruneEmptyParentDirectories(target.parentFile, rootDir)
-    }
-
-    private fun resolvePathInsideRoot(rootDir: File, relativePath: String): File? {
-        val canonicalRoot = rootDir.canonicalFile
-        val candidate = File(canonicalRoot, relativePath)
-        val canonicalCandidate = candidate.canonicalFile
-
-        val rootPath = canonicalRoot.path
-        val candidatePath = canonicalCandidate.path
-        val isInsideRoot = candidatePath == rootPath ||
-            candidatePath.startsWith("$rootPath${File.separator}")
-
-        return if (isInsideRoot) canonicalCandidate else null
-    }
-
-    private fun pruneEmptyParentDirectories(start: File?, stopAt: File) {
-        val canonicalStop = stopAt.canonicalFile
-        var current = start?.canonicalFile
-
-        while (current != null && current.path.startsWith(canonicalStop.path)) {
-            if (current == canonicalStop) {
-                break
-            }
-
-            val children = current.listFiles()
-            if (children.isNullOrEmpty()) {
-                if (!current.delete()) {
-                    break
-                }
-            } else {
-                break
-            }
-            current = current.parentFile?.canonicalFile
-        }
-    }
-
-    private fun containsAtLeastOneFile(rootDir: File): Boolean {
-        return rootDir.walkTopDown().any { it.isFile }
     }
 
     private data class StructureInfo(

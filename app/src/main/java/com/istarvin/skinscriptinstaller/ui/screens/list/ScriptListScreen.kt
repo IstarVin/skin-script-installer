@@ -80,8 +80,6 @@ import com.istarvin.skinscriptinstaller.ui.components.AppEmptyState
 import com.istarvin.skinscriptinstaller.ui.components.CollapsibleSection
 import com.istarvin.skinscriptinstaller.ui.components.DeleteScriptDialog
 import com.istarvin.skinscriptinstaller.ui.components.ImportChoiceBottomSheet
-import com.istarvin.skinscriptinstaller.ui.components.ImportFileConflictDialog
-import com.istarvin.skinscriptinstaller.ui.components.ImportFileConflictDialogItem
 import com.istarvin.skinscriptinstaller.ui.components.InstallStatusChip
 import com.istarvin.skinscriptinstaller.ui.components.ZipPasswordDialog
 import com.istarvin.skinscriptinstaller.ui.theme.AppAlpha
@@ -108,7 +106,6 @@ fun ScriptListScreen(
     val reinstallReplacedMessage by viewModel.reinstallReplacedMessage.collectAsState()
     val importError by viewModel.importError.collectAsState()
     val zipPasswordPrompt by viewModel.zipPasswordPrompt.collectAsState()
-    val importConflictPrompt by viewModel.importConflictPrompt.collectAsState()
     val pendingClassificationScriptId by viewModel.pendingClassificationScriptId.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -362,23 +359,6 @@ fun ScriptListScreen(
                     zipPasswordText = ""
                     viewModel.dismissZipPasswordPrompt()
                 }
-            )
-        }
-
-        importConflictPrompt?.let { prompt ->
-            ImportFileConflictDialog(
-                operationLabel = "Import",
-                conflicts = prompt.files.map { conflict ->
-                    ImportFileConflictDialogItem(
-                        relativePath = conflict.relativePath,
-                        existingScriptNames = conflict.existingScriptNames,
-                        choice = conflict.choice
-                    )
-                },
-                isProcessing = isImporting,
-                onChoiceChange = viewModel::updateImportConflictChoice,
-                onConfirm = viewModel::confirmImportConflictResolution,
-                onDismiss = viewModel::dismissImportConflictPrompt
             )
         }
 

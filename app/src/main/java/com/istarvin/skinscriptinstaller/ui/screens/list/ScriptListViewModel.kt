@@ -10,9 +10,6 @@ import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
-import com.istarvin.skinscriptinstaller.domain.ImportConflictResolutionChoice
-import com.istarvin.skinscriptinstaller.domain.ImportFileConflict
-import com.istarvin.skinscriptinstaller.domain.ImportedScriptPayload
 import com.istarvin.skinscriptinstaller.domain.ReinstallReplacedScriptsResult
 import com.istarvin.skinscriptinstaller.domain.ReinstallReplacedScriptsUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
@@ -54,16 +51,6 @@ data class ScriptWithStatus(
 data class ZipPasswordPrompt(
     val zipUri: Uri,
     val errorMessage: String? = null
-)
-
-data class ImportConflictFileChoice(
-    val relativePath: String,
-    val existingScriptNames: List<String>,
-    val choice: ImportConflictResolutionChoice = ImportConflictResolutionChoice.KEEP_EXISTING
-)
-
-data class ImportConflictPrompt(
-    val files: List<ImportConflictFileChoice>
 )
 
 data class SkinReplacementGroup(
@@ -127,8 +114,6 @@ class ScriptListViewModel @Inject constructor(
 ) : ViewModel() {
 
     private var didInitializeExpandedSections = false
-    private var pendingPreparedImport: ImportedScriptPayload? = null
-    private var pendingImportConflicts: List<ImportFileConflict> = emptyList()
 
     val eligibleUserIds: StateFlow<List<Int>> = userSelectionManager.eligibleUserIds
 
@@ -258,10 +243,6 @@ class ScriptListViewModel @Inject constructor(
     private val _zipPasswordPrompt = MutableStateFlow<ZipPasswordPrompt?>(null)
     val zipPasswordPrompt: StateFlow<ZipPasswordPrompt?> = _zipPasswordPrompt.asStateFlow()
 
-    private val _importConflictPrompt = MutableStateFlow<ImportConflictPrompt?>(null)
-    val importConflictPrompt: StateFlow<ImportConflictPrompt?> =
-        _importConflictPrompt.asStateFlow()
-
     private val _pendingClassificationScriptId = MutableStateFlow<Long?>(null)
     val pendingClassificationScriptId: StateFlow<Long?> = _pendingClassificationScriptId.asStateFlow()
 
@@ -326,24 +307,13 @@ class ScriptListViewModel @Inject constructor(
             _isImporting.value = true
             _importError.value = null
             _zipPasswordPrompt.value = null
-            clearPendingImportConflictState(deletePreparedImport = true)
-
-            val preparedImport = importScriptUseCase.prepareTreeImport(treeUri).getOrElse { e ->
-                _importError.value = e.message ?: "Import failed"
-                _isImporting.value = false
-                return@launch
-            }
-
-            val importedScript = resolvePreparedImport(preparedImport).getOrElse { e ->
-                _importError.value = e.message ?: "Import failed"
-                _isImporting.value = false
-                return@launch
-            }
-
-            importedScript?.let { script ->
+            val result = importScriptUseCase.execute(treeUri)
+            result.onSuccess { script ->
                 _pendingClassificationScriptId.value = script.id
             }
-
+            result.onFailure { e ->
+                _importError.value = e.message ?: "Import failed"
+            }
             _isImporting.value = false
         }
     }
@@ -400,61 +370,6 @@ class ScriptListViewModel @Inject constructor(
         importZipInternal(prompt.zipUri, password.toCharArray())
     }
 
-    fun updateImportConflictChoice(relativePath: String, choice: ImportConflictResolutionChoice) {
-        val currentPrompt = _importConflictPrompt.value ?: return
-        _importConflictPrompt.value = currentPrompt.copy(
-            files = currentPrompt.files.map { fileChoice ->
-                if (fileChoice.relativePath == relativePath) {
-                    fileChoice.copy(choice = choice)
-                } else {
-                    fileChoice
-                }
-            }
-        )
-    }
-
-    fun confirmImportConflictResolution() {
-        val preparedImport = pendingPreparedImport ?: return
-        val conflicts = pendingImportConflicts
-        val prompt = _importConflictPrompt.value ?: return
-
-        viewModelScope.launch {
-            _isImporting.value = true
-            _importError.value = null
-
-            val choices = prompt.files.associate { it.relativePath to it.choice }
-            val appliedImport = importScriptUseCase
-                .applyConflictChoices(
-                    preparedImport = preparedImport,
-                    conflicts = conflicts,
-                    choices = choices
-                )
-                .getOrElse { e ->
-                    _importError.value = e.message ?: "Import failed"
-                    clearPendingImportConflictState(deletePreparedImport = true)
-                    _isImporting.value = false
-                    return@launch
-                }
-
-            val importedScript = importScriptUseCase.persistPreparedImport(appliedImport).getOrElse { e ->
-                _importError.value = e.message ?: "Import failed"
-                clearPendingImportConflictState(deletePreparedImport = true)
-                _isImporting.value = false
-                return@launch
-            }
-
-            clearPendingImportConflictState(deletePreparedImport = false)
-            _pendingClassificationScriptId.value = importedScript.id
-            _isImporting.value = false
-        }
-    }
-
-    fun dismissImportConflictPrompt() {
-        viewModelScope.launch {
-            clearPendingImportConflictState(deletePreparedImport = true)
-        }
-    }
-
     fun dismissZipPasswordPrompt() {
         _zipPasswordPrompt.value = null
     }
@@ -467,10 +382,13 @@ class ScriptListViewModel @Inject constructor(
         viewModelScope.launch {
             _isImporting.value = true
             _importError.value = null
-            clearPendingImportConflictState(deletePreparedImport = true)
 
-            val preparedImportResult = importScriptUseCase.prepareZipImport(zipUri, password)
-            val preparedImport = preparedImportResult.getOrElse { e ->
+            val result = importScriptUseCase.executeZip(zipUri, password)
+            result.onSuccess { script ->
+                _zipPasswordPrompt.value = null
+                _pendingClassificationScriptId.value = script.id
+            }
+            result.onFailure { e ->
                 when (e) {
                     is PasswordRequiredException -> {
                         _zipPasswordPrompt.value = ZipPasswordPrompt(
@@ -491,67 +409,9 @@ class ScriptListViewModel @Inject constructor(
                         _importError.value = e.message ?: "Import failed"
                     }
                 }
-
-                _isImporting.value = false
-                return@launch
-            }
-
-            _zipPasswordPrompt.value = null
-
-            val importedScript = resolvePreparedImport(preparedImport).getOrElse { e ->
-                _importError.value = e.message ?: "Import failed"
-                _isImporting.value = false
-                return@launch
-            }
-
-            importedScript?.let { script ->
-                _pendingClassificationScriptId.value = script.id
             }
 
             _isImporting.value = false
-        }
-    }
-
-    private suspend fun resolvePreparedImport(
-        preparedImport: ImportedScriptPayload
-    ): Result<SkinScript?> {
-        val conflicts = importScriptUseCase.detectFileConflicts(preparedImport).getOrElse { e ->
-            importScriptUseCase.cleanupPreparedImport(preparedImport)
-            return Result.failure(e)
-        }
-
-        if (conflicts.isEmpty()) {
-            val importedScript = importScriptUseCase.persistPreparedImport(preparedImport).getOrElse { e ->
-                importScriptUseCase.cleanupPreparedImport(preparedImport)
-                return Result.failure(e)
-            }
-            return Result.success(importedScript)
-        }
-
-        pendingPreparedImport = preparedImport
-        pendingImportConflicts = conflicts
-        _importConflictPrompt.value = ImportConflictPrompt(
-            files = conflicts.map { conflict ->
-                ImportConflictFileChoice(
-                    relativePath = conflict.relativePath,
-                    existingScriptNames = conflict.existingScripts
-                        .map { it.scriptName }
-                        .distinct(),
-                    choice = ImportConflictResolutionChoice.KEEP_EXISTING
-                )
-            }
-        )
-        return Result.success(null)
-    }
-
-    private suspend fun clearPendingImportConflictState(deletePreparedImport: Boolean) {
-        val preparedImport = pendingPreparedImport
-        pendingPreparedImport = null
-        pendingImportConflicts = emptyList()
-        _importConflictPrompt.value = null
-
-        if (deletePreparedImport && preparedImport != null) {
-            importScriptUseCase.cleanupPreparedImport(preparedImport)
         }
     }
 

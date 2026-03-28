@@ -13,9 +13,6 @@ import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.domain.ClassifyScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
-import com.istarvin.skinscriptinstaller.domain.ImportConflictResolutionChoice
-import com.istarvin.skinscriptinstaller.domain.ImportFileConflict
-import com.istarvin.skinscriptinstaller.domain.ImportedScriptPayload
 import com.istarvin.skinscriptinstaller.domain.InstallProgress
 import com.istarvin.skinscriptinstaller.domain.InstallScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreScriptUseCase
@@ -58,16 +55,6 @@ data class InstallConflictWarningState(
     val conflicts: List<HeroInstallationConflict>
 )
 
-data class UpdateImportConflictFileChoice(
-    val relativePath: String,
-    val existingScriptNames: List<String>,
-    val choice: ImportConflictResolutionChoice = ImportConflictResolutionChoice.KEEP_EXISTING
-)
-
-data class UpdateImportConflictPrompt(
-    val files: List<UpdateImportConflictFileChoice>
-)
-
 @HiltViewModel
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class ScriptDetailViewModel @Inject constructor(
@@ -84,11 +71,6 @@ class ScriptDetailViewModel @Inject constructor(
 
     private val scriptId: Long = savedStateHandle["scriptId"] ?: -1L
     private var pendingReinstallUserId: Int? = null
-    private var pendingUpdatePreparedImport: ImportedScriptPayload? = null
-    private var pendingUpdateConflicts: List<ImportFileConflict> = emptyList()
-    private var pendingUpdateTargetUserId: Int? = null
-    private var pendingUpdateShouldReinstall: Boolean = false
-    private var pendingUpdateRestoreInstallationId: Long? = null
 
     private val _script = MutableStateFlow<SkinScript?>(null)
     val script: StateFlow<SkinScript?> = _script.asStateFlow()
@@ -120,10 +102,6 @@ class ScriptDetailViewModel @Inject constructor(
     private val _installConflictWarning = MutableStateFlow<InstallConflictWarningState?>(null)
     val installConflictWarning: StateFlow<InstallConflictWarningState?> =
         _installConflictWarning.asStateFlow()
-
-    private val _updateImportConflictPrompt = MutableStateFlow<UpdateImportConflictPrompt?>(null)
-    val updateImportConflictPrompt: StateFlow<UpdateImportConflictPrompt?> =
-        _updateImportConflictPrompt.asStateFlow()
 
     // Classification state
     private val _heroName = MutableStateFlow<String?>(null)
@@ -505,7 +483,7 @@ class ScriptDetailViewModel @Inject constructor(
 
     fun updateScript(treeUri: Uri) {
         viewModelScope.launch {
-            prepareScriptUpdate {
+            performScriptUpdate {
                 importScriptUseCase.prepareTreeImport(treeUri)
             }
         }
@@ -524,84 +502,22 @@ class ScriptDetailViewModel @Inject constructor(
         _zipPasswordPrompt.value = null
     }
 
-    fun updateUpdateConflictChoice(relativePath: String, choice: ImportConflictResolutionChoice) {
-        val currentPrompt = _updateImportConflictPrompt.value ?: return
-        _updateImportConflictPrompt.value = currentPrompt.copy(
-            files = currentPrompt.files.map { fileChoice ->
-                if (fileChoice.relativePath == relativePath) {
-                    fileChoice.copy(choice = choice)
-                } else {
-                    fileChoice
-                }
-            }
-        )
-    }
-
-    fun confirmUpdateConflictResolution() {
-        val preparedImport = pendingUpdatePreparedImport ?: return
-        val conflicts = pendingUpdateConflicts
-        val prompt = _updateImportConflictPrompt.value ?: return
-        val targetUserId = pendingUpdateTargetUserId ?: _selectedUserId.value
-        val shouldReinstallAfterUpdate = pendingUpdateShouldReinstall
-        val restoreInstallationId = pendingUpdateRestoreInstallationId
-        val currentScript = _script.value ?: run {
-            _error.value = "Script not found"
-            return
-        }
-
-        viewModelScope.launch {
-            _isImporting.value = true
-            _isOperating.value = true
-            _error.value = null
-
-            val choices = prompt.files.associate { it.relativePath to it.choice }
-            val resolvedImport = importScriptUseCase.applyConflictChoices(
-                preparedImport = preparedImport,
-                conflicts = conflicts,
-                choices = choices
-            ).getOrElse { e ->
-                _error.value = e.message ?: "Update failed during conflict resolution"
-                clearPendingUpdateConflictState(deletePreparedImport = true)
-                _isImporting.value = false
-                _isOperating.value = false
-                return@launch
-            }
-
-            clearPendingUpdateConflictState(deletePreparedImport = false)
-            executePreparedScriptUpdate(
-                currentScript = currentScript,
-                importedPayload = resolvedImport,
-                targetUserId = targetUserId,
-                shouldReinstallAfterUpdate = shouldReinstallAfterUpdate,
-                restoreInstallationId = restoreInstallationId
-            )
-        }
-    }
-
-    fun dismissUpdateConflictPrompt() {
-        viewModelScope.launch {
-            clearPendingUpdateConflictState(deletePreparedImport = true)
-        }
-    }
-
     private fun updateZipInternal(zipUri: Uri, password: CharArray?) {
         viewModelScope.launch {
-            prepareScriptUpdate(zipUriForPrompt = zipUri) {
+            performScriptUpdate(zipUriForPrompt = zipUri) {
                 importScriptUseCase.prepareZipImport(zipUri, password)
             }
         }
     }
 
-    private suspend fun prepareScriptUpdate(
+    private suspend fun performScriptUpdate(
         zipUriForPrompt: Uri? = null,
-        importer: suspend () -> Result<ImportedScriptPayload>
+        importer: suspend () -> Result<com.istarvin.skinscriptinstaller.domain.ImportedScriptPayload>
     ) {
         val currentScript = _script.value ?: run {
             _error.value = "Script not found"
             return
         }
-
-        clearPendingUpdateConflictState(deletePreparedImport = true)
 
         _isImporting.value = true
         _isOperating.value = true
@@ -611,10 +527,24 @@ class ScriptDetailViewModel @Inject constructor(
         val activeInstallation = repository.getLatestInstallation(currentScript.id, targetUserId)
         val wasInstalled = activeInstallation?.status == InstallationStatus.INSTALLED
         val shouldReinstallAfterUpdate = pendingReinstallUserId == targetUserId || wasInstalled
-        val restoreInstallationId = if (wasInstalled) activeInstallation.id else null
 
         if (!shouldReinstallAfterUpdate) {
             pendingReinstallUserId = null
+        }
+
+        if (wasInstalled) {
+            restoreScriptUseCase.resetProgress()
+            val restoreResult = restoreScriptUseCase.execute(activeInstallation.id)
+            if (restoreResult.isFailure) {
+                _error.value = restoreResult.exceptionOrNull()?.message ?: "Update failed during restore"
+                _installation.value = repository.getLatestInstallation(currentScript.id, targetUserId)
+                pendingReinstallUserId = null
+                _isImporting.value = false
+                _isOperating.value = false
+                return
+            }
+            pendingReinstallUserId = targetUserId
+            _installation.value = repository.getLatestInstallation(currentScript.id, targetUserId)
         }
 
         val importedPayload = importer().getOrElse { error ->
@@ -652,78 +582,10 @@ class ScriptDetailViewModel @Inject constructor(
 
         _zipPasswordPrompt.value = null
 
-        val conflicts = importScriptUseCase.detectFileConflicts(
-            preparedImport = importedPayload,
-            excludeScriptId = currentScript.id
-        ).getOrElse { error ->
-            _error.value = error.message ?: "Update failed during conflict scan"
-            importScriptUseCase.cleanupPreparedImport(importedPayload)
-            _installation.value = repository.getLatestInstallation(currentScript.id, targetUserId)
-            _isImporting.value = false
-            _isOperating.value = false
-            return
-        }
-
-        if (conflicts.isNotEmpty()) {
-            pendingUpdatePreparedImport = importedPayload
-            pendingUpdateConflicts = conflicts
-            pendingUpdateTargetUserId = targetUserId
-            pendingUpdateShouldReinstall = shouldReinstallAfterUpdate
-            pendingUpdateRestoreInstallationId = restoreInstallationId
-            _updateImportConflictPrompt.value = UpdateImportConflictPrompt(
-                files = conflicts.map { conflict ->
-                    UpdateImportConflictFileChoice(
-                        relativePath = conflict.relativePath,
-                        existingScriptNames = conflict.existingScripts
-                            .map { it.scriptName }
-                            .distinct(),
-                        choice = ImportConflictResolutionChoice.KEEP_EXISTING
-                    )
-                }
-            )
-            _isImporting.value = false
-            _isOperating.value = false
-            return
-        }
-
-        executePreparedScriptUpdate(
-            currentScript = currentScript,
-            importedPayload = importedPayload,
-            targetUserId = targetUserId,
-            shouldReinstallAfterUpdate = shouldReinstallAfterUpdate,
-            restoreInstallationId = restoreInstallationId
-        )
-    }
-
-    private suspend fun executePreparedScriptUpdate(
-        currentScript: SkinScript,
-        importedPayload: ImportedScriptPayload,
-        targetUserId: Int,
-        shouldReinstallAfterUpdate: Boolean,
-        restoreInstallationId: Long?
-    ) {
-        _isImporting.value = true
-        _isOperating.value = true
-        _error.value = null
-
         val oldStorageDir = File(currentScript.storagePath)
         val newStorageDir = File(importedPayload.storagePath)
 
         try {
-            if (restoreInstallationId != null) {
-                restoreScriptUseCase.resetProgress()
-                val restoreResult = restoreScriptUseCase.execute(restoreInstallationId)
-                if (restoreResult.isFailure) {
-                    _error.value = restoreResult.exceptionOrNull()?.message
-                        ?: "Update failed during restore"
-                    _installation.value = repository.getLatestInstallation(currentScript.id, targetUserId)
-                    pendingReinstallUserId = null
-                    return
-                }
-                pendingReinstallUserId = targetUserId
-                _installation.value = repository.getLatestInstallation(currentScript.id, targetUserId)
-            }
-
             val updatedScript = currentScript.copy(
                 name = importedPayload.name,
                 importedAt = System.currentTimeMillis(),
@@ -761,20 +623,6 @@ class ScriptDetailViewModel @Inject constructor(
             }
             _isImporting.value = false
             _isOperating.value = false
-        }
-    }
-
-    private suspend fun clearPendingUpdateConflictState(deletePreparedImport: Boolean) {
-        val pendingImport = pendingUpdatePreparedImport
-        pendingUpdatePreparedImport = null
-        pendingUpdateConflicts = emptyList()
-        pendingUpdateTargetUserId = null
-        pendingUpdateShouldReinstall = false
-        pendingUpdateRestoreInstallationId = null
-        _updateImportConflictPrompt.value = null
-
-        if (deletePreparedImport && pendingImport != null) {
-            importScriptUseCase.cleanupPreparedImport(pendingImport)
         }
     }
 
