@@ -70,9 +70,6 @@ import com.istarvin.skinscriptinstaller.ui.components.ZipPasswordDialog
 import com.istarvin.skinscriptinstaller.ui.theme.AppAlpha
 import com.istarvin.skinscriptinstaller.ui.theme.AppDimens
 import coil3.compose.AsyncImage
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -647,9 +644,4 @@ private fun OldSkinItem(
             }
         }
     }
-}
-
-private fun formatDate(millis: Long): String {
-    val sdf = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault())
-    return sdf.format(Date(millis))
 }

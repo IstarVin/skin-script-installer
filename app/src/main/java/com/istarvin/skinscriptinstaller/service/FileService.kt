@@ -3,6 +3,7 @@ package com.istarvin.skinscriptinstaller.service
 import android.os.ParcelFileDescriptor
 import com.istarvin.skinscriptinstaller.IFileService
 import java.io.File
+import kotlin.system.exitProcess
 
 /**
  * Shizuku UserService implementation. Runs in a separate process with shell (adb) permissions.
@@ -15,7 +16,7 @@ class FileService : IFileService.Stub() {
     }
 
     override fun destroy() {
-        System.exit(0)
+        exitProcess(0)
     }
 
     override fun openFileForRead(path: String): ParcelFileDescriptor {

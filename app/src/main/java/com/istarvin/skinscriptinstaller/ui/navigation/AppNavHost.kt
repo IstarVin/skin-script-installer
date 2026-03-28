@@ -2,7 +2,6 @@ package com.istarvin.skinscriptinstaller.ui.navigation
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,6 +10,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -18,14 +18,13 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.istarvin.skinscriptinstaller.ui.components.UpdateAvailableDialog
+import com.istarvin.skinscriptinstaller.ui.screens.catalogeditor.CatalogEditorScreen
 import com.istarvin.skinscriptinstaller.ui.screens.detail.ScriptDetailScreen
 import com.istarvin.skinscriptinstaller.ui.screens.list.ScriptListScreen
 import com.istarvin.skinscriptinstaller.ui.screens.settings.SettingsScreen
-import com.istarvin.skinscriptinstaller.ui.screens.settings.UpdateEvent
 import com.istarvin.skinscriptinstaller.ui.screens.settings.UpdateCheckViewModel
+import com.istarvin.skinscriptinstaller.ui.screens.settings.UpdateEvent
 import com.istarvin.skinscriptinstaller.ui.screens.settings.UpdateState
-import com.istarvin.skinscriptinstaller.ui.screens.catalogeditor.CatalogEditorScreen
-import androidx.core.net.toUri
 
 @Composable
 fun AppNavHost(navController: NavHostController) {
@@ -48,7 +47,7 @@ fun AppNavHost(navController: NavHostController) {
                 UpdateEvent.OpenUnknownAppSourcesSettings -> {
                     val intent = Intent(
                         Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                        Uri.parse("package:${context.packageName}")
+                        "package:${context.packageName}".toUri()
                     )
                     unknownSourcesLauncher.launch(intent)
                 }

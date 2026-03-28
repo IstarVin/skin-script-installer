@@ -11,7 +11,7 @@ private const val FALLBACK_ASSET_FILE_NAME = "heroes_fallback.json"
 
 @Singleton
 class HeroCatalogFallbackAssetDataSource @Inject constructor(
-    @ApplicationContext private val context: Context
+    @param:ApplicationContext private val context: Context
 ) {
     private val gson = Gson()
 

@@ -1,7 +1,7 @@
 package com.istarvin.skinscriptinstaller.domain
 
 /**
- * Represents the progress of an install or restore operation.
+ * Represents the progress of an installation or restore operation.
  */
 data class InstallProgress(
     val currentIndex: Int,

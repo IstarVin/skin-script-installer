@@ -60,7 +60,7 @@ class ScriptDetailViewModel @Inject constructor(
     private val installScriptUseCase: InstallScriptUseCase,
     private val restoreScriptUseCase: RestoreScriptUseCase,
     private val classifyScriptUseCase: ClassifyScriptUseCase,
-    private val shizukuManager: ShizukuManager
+    shizukuManager: ShizukuManager
 ) : ViewModel() {
 
     private val scriptId: Long = savedStateHandle["scriptId"] ?: -1L
@@ -154,14 +154,6 @@ class ScriptDetailViewModel @Inject constructor(
                     loadInstallationForSelectedUser()
                 }
             }
-        }
-    }
-
-    fun selectInstallUser(userId: Int) {
-        if (userId in userSelectionManager.eligibleUserIds.value) {
-            _selectedUserId.value = userId
-            userSelectionManager.selectUser(userId)
-            loadInstallationForSelectedUser()
         }
     }
 
@@ -389,15 +381,6 @@ class ScriptDetailViewModel @Inject constructor(
         performReinstall(_selectedUserId.value)
     }
 
-    fun reinstallForUser(userId: Int) {
-        if (userId !in userSelectionManager.eligibleUserIds.value) {
-            _error.value = "Selected user is not eligible"
-            return
-        }
-        _selectedUserId.value = userId
-        performReinstall(userId)
-    }
-
     private fun performReinstall(targetUserId: Int) {
         viewModelScope.launch {
             if (userSelectionManager.eligibleUserIds.value.isEmpty()) {
@@ -613,15 +596,13 @@ class ScriptDetailViewModel @Inject constructor(
 
     private suspend fun loadSkinsForHero(heroId: Long) {
         val skins = repository.getSkinsByHeroIdOnce(heroId)
-        _skinsForSelectedHero.value = if (skins.isEmpty()) {
+        _skinsForSelectedHero.value = skins.ifEmpty {
             defaultSkinsForHero(heroId)
-        } else {
-            skins
         }
     }
 
     private fun inferHeroFromScriptName(scriptName: String, heroes: List<Hero>): String? {
-        // Strip parenthetical/bracket suffixes (e.g. "(SFILE.MOBI)"), normalise to lowercase words
+        // Strip parenthetical/bracket suffixes (e.g. "(SFILE.MOBI)"), normalize to lowercase words
         val normalized = scriptName
             .replace(Regex("\\([^)]*\\)"), " ")
             .replace(Regex("\\[[^]]*]"), " ")

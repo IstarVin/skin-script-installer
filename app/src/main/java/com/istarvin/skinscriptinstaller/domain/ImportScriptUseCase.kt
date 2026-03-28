@@ -149,8 +149,6 @@ class ImportScriptUseCase @Inject constructor(
                 val sourceDoc = structureInfo.artParentDoc ?: rootDoc
                 copyDocumentTree(sourceDoc, destAssetsDir)
             }
-
-            StructureType.INVALID_NO_ART -> Unit
         }
 
         return Result.success(
@@ -161,7 +159,7 @@ class ImportScriptUseCase @Inject constructor(
         )
     }
 
-    private suspend fun prepareImportFromFileRoot(
+    private fun prepareImportFromFileRoot(
         rootDir: File,
         sourceUri: Uri
     ): Result<ImportedScriptPayload> {
@@ -187,8 +185,6 @@ class ImportScriptUseCase @Inject constructor(
                 val sourceDir = structureInfo.artParentDir ?: rootDir
                 copyFileTree(sourceDir, destAssetsDir)
             }
-
-            StructureType.INVALID_NO_ART -> Unit
         }
 
         val scriptName = queryDisplayName(sourceUri)?.removeSuffix(".zip") ?: rootDir.name
