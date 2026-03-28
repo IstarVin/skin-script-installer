@@ -4,6 +4,12 @@ import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -197,7 +203,19 @@ fun ScriptListScreen(
                 )
             }
 
-            if (showSearchField) {
+            AnimatedVisibility(
+                visible = showSearchField,
+                enter = fadeIn(animationSpec = tween(durationMillis = 180)) +
+                    slideInVertically(
+                        animationSpec = tween(durationMillis = 220),
+                        initialOffsetY = { -it / 2 }
+                    ),
+                exit = fadeOut(animationSpec = tween(durationMillis = 120)) +
+                    slideOutVertically(
+                        animationSpec = tween(durationMillis = 180),
+                        targetOffsetY = { -it / 2 }
+                    )
+            ) {
                 HeroSearchField(
                     query = searchQuery,
                     onQueryChange = viewModel::updateSearchQuery,
