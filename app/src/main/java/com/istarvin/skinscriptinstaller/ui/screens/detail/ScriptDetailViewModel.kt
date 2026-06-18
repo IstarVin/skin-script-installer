@@ -11,6 +11,7 @@ import com.istarvin.skinscriptinstaller.data.db.entity.Skin
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
 import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
+import com.istarvin.skinscriptinstaller.domain.ClearBackupsUseCase
 import com.istarvin.skinscriptinstaller.domain.ClassifyScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.FileConflictChoice
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
@@ -84,6 +85,7 @@ class ScriptDetailViewModel @Inject constructor(
     private val restoreScriptUseCase: RestoreScriptUseCase,
     private val classifyScriptUseCase: ClassifyScriptUseCase,
     private val verifyInstalledScriptsUseCase: VerifyInstalledScriptsUseCase,
+    private val clearBackupsUseCase: ClearBackupsUseCase,
     shizukuManager: ShizukuManager
 ) : ViewModel() {
 
@@ -113,6 +115,12 @@ class ScriptDetailViewModel @Inject constructor(
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+
+    private val _isClearingBackup = MutableStateFlow(false)
+    val isClearingBackup: StateFlow<Boolean> = _isClearingBackup.asStateFlow()
+
+    private val _clearBackupMessage = MutableStateFlow<String?>(null)
+    val clearBackupMessage: StateFlow<String?> = _clearBackupMessage.asStateFlow()
 
     private val _zipPasswordPrompt = MutableStateFlow<DetailZipPasswordPrompt?>(null)
     val zipPasswordPrompt: StateFlow<DetailZipPasswordPrompt?> = _zipPasswordPrompt.asStateFlow()
@@ -718,6 +726,25 @@ class ScriptDetailViewModel @Inject constructor(
 
     fun clearError() {
         _error.value = null
+    }
+
+    fun clearBackup() {
+        viewModelScope.launch {
+            if (_isClearingBackup.value) return@launch
+            _isClearingBackup.value = true
+            _clearBackupMessage.value = null
+            val result = clearBackupsUseCase.clearForScript(scriptId)
+            _clearBackupMessage.value = result.fold(
+                onSuccess = { "Backup cleared — script reset to uninstalled state" },
+                onFailure = { it.message ?: "Failed to clear backup" }
+            )
+            refreshScript()
+            _isClearingBackup.value = false
+        }
+    }
+
+    fun dismissClearBackupMessage() {
+        _clearBackupMessage.value = null
     }
 
     // --- Classification ---

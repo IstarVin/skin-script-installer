@@ -90,6 +90,8 @@ fun ScriptDetailScreen(
     val isShizukuReady by viewModel.isShizukuReady.collectAsState()
     val isImporting by viewModel.isImporting.collectAsState()
     val isRefreshing by viewModel.isRefreshing.collectAsState()
+    val isClearingBackup by viewModel.isClearingBackup.collectAsState()
+    val clearBackupMessage by viewModel.clearBackupMessage.collectAsState()
     val zipPasswordPrompt by viewModel.zipPasswordPrompt.collectAsState()
     val installConflictWarning by viewModel.installConflictWarning.collectAsState()
     val fileConflictWarning by viewModel.fileConflictWarning.collectAsState()
@@ -141,6 +143,13 @@ fun ScriptDetailScreen(
         error?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.clearError()
+        }
+    }
+
+    LaunchedEffect(clearBackupMessage) {
+        clearBackupMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.dismissClearBackupMessage()
         }
     }
 
@@ -334,6 +343,23 @@ fun ScriptDetailScreen(
                             )
                         ) {
                             Text("Restore")
+                        }
+                    }
+
+                    val canClearBackup = !isOperating && !isRefreshing && !isClearingBackup &&
+                        status != null && status != InstallationStatus.NOT_INSTALLED &&
+                        status != InstallationStatus.RESTORED
+                    if (canClearBackup) {
+                        Spacer(modifier = Modifier.height(AppDimens.SpaceXs))
+                        OutlinedButton(
+                            onClick = { viewModel.clearBackup() },
+                            enabled = !isClearingBackup,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Clear Backup & Reset State")
                         }
                     }
 

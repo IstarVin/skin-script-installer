@@ -3,6 +3,7 @@ package com.istarvin.skinscriptinstaller.ui.screens.settings
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.istarvin.skinscriptinstaller.domain.ClearBackupsUseCase
 import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
 import com.istarvin.skinscriptinstaller.domain.RestoreAllScriptsResult
 import com.istarvin.skinscriptinstaller.domain.RestoreAllScriptsUseCase
@@ -32,7 +33,8 @@ class SettingsViewModel @Inject constructor(
     private val restoreAllScriptsUseCase: RestoreAllScriptsUseCase,
     private val exportAppDataBackupUseCase: ExportAppDataBackupUseCase,
     private val importAppDataBackupUseCase: ImportAppDataBackupUseCase,
-    private val fetchHeroCatalogUseCase: FetchHeroCatalogUseCase
+    private val fetchHeroCatalogUseCase: FetchHeroCatalogUseCase,
+    private val clearBackupsUseCase: ClearBackupsUseCase
 ) : ViewModel() {
 
     val isShizukuAvailable: StateFlow<Boolean> = shizukuManager.isShizukuAvailable
@@ -58,6 +60,12 @@ class SettingsViewModel @Inject constructor(
 
     private val _restoreAllMessage = MutableStateFlow<String?>(null)
     val restoreAllMessage: StateFlow<String?> = _restoreAllMessage.asStateFlow()
+
+    private val _isClearingBackups = MutableStateFlow(false)
+    val isClearingBackups: StateFlow<Boolean> = _isClearingBackups.asStateFlow()
+
+    private val _clearBackupsMessage = MutableStateFlow<String?>(null)
+    val clearBackupsMessage: StateFlow<String?> = _clearBackupsMessage.asStateFlow()
 
     val restoreAllCount: StateFlow<Int> = activeUserId
         .flatMapLatest { selectedUserId ->
@@ -172,7 +180,25 @@ class SettingsViewModel @Inject constructor(
         _catalogRefreshMessage.value = null
     }
 
-    private fun formatRestoreAllMessage(
+    fun clearAllBackups() {
+        viewModelScope.launch {
+            if (_isClearingBackups.value) return@launch
+            _isClearingBackups.value = true
+            _clearBackupsMessage.value = null
+            val result = clearBackupsUseCase.clearAll()
+            _clearBackupsMessage.value = result.fold(
+                onSuccess = { count -> "Cleared backups for $count installation(s)" },
+                onFailure = { it.message ?: "Failed to clear backups" }
+            )
+            _isClearingBackups.value = false
+        }
+    }
+
+    fun dismissClearBackupsMessage() {
+        _clearBackupsMessage.value = null
+    }
+
+        private fun formatRestoreAllMessage(
         result: RestoreAllScriptsResult,
         userId: Int
     ): String {

@@ -43,6 +43,7 @@ object SettingsTestTags {
     const val MaintenanceBackup = "settings-maintenance-backup"
     const val MaintenanceCatalog = "settings-maintenance-catalog"
     const val MaintenanceRestoreAll = "settings-maintenance-restore-all"
+    const val MaintenanceClearBackups = "settings-maintenance-clear-backups"
     const val MaintenanceUpdates = "settings-maintenance-updates"
 }
 
@@ -73,6 +74,8 @@ fun SettingsScreen(
     val canRestoreAll by viewModel.canRestoreAll.collectAsState()
     val isRestoringAll by viewModel.isRestoringAll.collectAsState()
     val restoreAllMessage by viewModel.restoreAllMessage.collectAsState()
+    val isClearingBackups by viewModel.isClearingBackups.collectAsState()
+    val clearBackupsMessage by viewModel.clearBackupsMessage.collectAsState()
     var visibleUpdateCheckMessage by remember { mutableStateOf<String?>(null) }
 
     val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss") }
@@ -130,6 +133,10 @@ fun SettingsScreen(
         isRestoringAll = isRestoringAll,
         restoreAllMessage = restoreAllMessage,
         onRestoreAll = viewModel::restoreAll,
+        isClearingBackups = isClearingBackups,
+        clearBackupsMessage = clearBackupsMessage,
+        onClearAllBackups = viewModel::clearAllBackups,
+        onDismissClearBackupsMessage = viewModel::dismissClearBackupsMessage,
         onRefreshHeroCatalog = viewModel::refreshHeroCatalog,
         isRefreshingCatalog = isRefreshingCatalog,
         catalogRefreshMessage = catalogRefreshMessage,
@@ -162,6 +169,10 @@ fun SettingsContent(
     isRestoringAll: Boolean,
     restoreAllMessage: String?,
     onRestoreAll: () -> Unit,
+    isClearingBackups: Boolean,
+    clearBackupsMessage: String?,
+    onClearAllBackups: () -> Unit,
+    onDismissClearBackupsMessage: () -> Unit,
     onRefreshHeroCatalog: () -> Unit,
     isRefreshingCatalog: Boolean,
     catalogRefreshMessage: String?,
@@ -203,6 +214,25 @@ fun SettingsContent(
                 negativeKeywords = listOf("failed", "incompatible")
             ),
             testTag = SettingsTestTags.MaintenanceBackup
+        ),
+        MaintenanceBlockState(
+            title = "Clear Backups",
+            description = "Reset all install states to uninstalled. Scripts stay registered but appear as never installed in the game.",
+            primaryAction = SettingsActionButton(
+                label = "Clear All Backups",
+                onClick = onClearAllBackups,
+                enabled = !isClearingBackups,
+                style = SettingsActionStyle.Outlined
+            ),
+            isInProgress = isClearingBackups,
+            progressLabel = "Clearing backups...",
+            progress = null,
+            message = clearBackupsMessage,
+            messageTone = feedbackTone(
+                message = clearBackupsMessage,
+                negativeKeywords = listOf("failed", "error")
+            ),
+            testTag = SettingsTestTags.MaintenanceClearBackups
         ),
         MaintenanceBlockState(
             title = "Hero Catalog",
