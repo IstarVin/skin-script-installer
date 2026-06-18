@@ -10,6 +10,7 @@ import com.istarvin.skinscriptinstaller.data.db.query.FileOwnershipConflict
 import com.istarvin.skinscriptinstaller.data.db.query.HeroInstallationConflict
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
 import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
+import com.istarvin.skinscriptinstaller.domain.ClearBackupsUseCase
 import com.istarvin.skinscriptinstaller.domain.ClassifyScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.FileConflictChoice
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
@@ -49,6 +50,7 @@ class ScriptDetailViewModelTest {
     private lateinit var restoreScriptUseCase: RestoreScriptUseCase
     private lateinit var classifyScriptUseCase: ClassifyScriptUseCase
     private lateinit var verifyInstalledScriptsUseCase: VerifyInstalledScriptsUseCase
+    private lateinit var clearBackupsUseCase: ClearBackupsUseCase
     private lateinit var shizukuManager: ShizukuManager
 
     private val activeUserIdFlow = MutableStateFlow(0)
@@ -71,6 +73,7 @@ class ScriptDetailViewModelTest {
         restoreScriptUseCase = mockk(relaxed = true)
         classifyScriptUseCase = mockk(relaxed = true)
         verifyInstalledScriptsUseCase = mockk(relaxed = true)
+        clearBackupsUseCase = mockk(relaxed = true)
         shizukuManager = mockk(relaxed = true)
 
         every { activeUserStore.activeUserId } returns activeUserIdFlow
@@ -98,7 +101,8 @@ class ScriptDetailViewModelTest {
         return ScriptDetailViewModel(
             savedStateHandle, repository, userSelectionManager,
             importScriptUseCase, installScriptUseCase, restoreScriptUseCase,
-            classifyScriptUseCase, verifyInstalledScriptsUseCase, shizukuManager
+            classifyScriptUseCase, verifyInstalledScriptsUseCase, clearBackupsUseCase,
+            shizukuManager
         )
     }
 
