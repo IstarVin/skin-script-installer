@@ -397,7 +397,7 @@ class ScriptListViewModel @Inject constructor(
             _isRefreshing.value = true
             try {
                 verifyInstalledScriptsUseCase.execute()
-                fetchDownlinkScripts()
+                fetchDownlinkScripts(forceRefresh = true)
             } finally {
                 _isRefreshing.value = false
             }
@@ -470,13 +470,13 @@ class ScriptListViewModel @Inject constructor(
         _downlinkError.value = null
     }
 
-    private suspend fun fetchDownlinkScripts() {
+    private suspend fun fetchDownlinkScripts(forceRefresh: Boolean = false) {
         val heroList = heroes.value.ifEmpty { repository.getAllHeroesOnce() }
         if (heroList.isEmpty()) {
             return
         }
 
-        val result = downlinkRepositoryDataSource.fetchScripts(heroList)
+        val result = downlinkRepositoryDataSource.fetchScripts(heroList, forceRefresh)
         result.onSuccess { entries ->
             _downlinkEntries.value = entries
             _downlinkError.value = null

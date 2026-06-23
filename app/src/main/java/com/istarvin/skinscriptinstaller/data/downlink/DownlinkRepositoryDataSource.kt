@@ -11,10 +11,19 @@ import javax.inject.Singleton
 @Singleton
 class DownlinkRepositoryDataSource @Inject constructor(
     private val okHttpClient: OkHttpClient,
-    private val parser: DownlinkScriptParser
+    private val parser: DownlinkScriptParser,
+    private val cache: DownlinkRepositoryCache
 ) {
-    suspend fun fetchScripts(heroes: List<Hero>): Result<List<DownlinkRepositoryEntry>> =
+    suspend fun fetchScripts(
+        heroes: List<Hero>,
+        forceRefresh: Boolean = false
+    ): Result<List<DownlinkRepositoryEntry>> =
         withContext(Dispatchers.IO) {
+            val cachedEntries = cache.read()
+            if (!forceRefresh && cachedEntries.isNotEmpty()) {
+                return@withContext Result.success(cachedEntries)
+            }
+
             runCatching {
                 val request = Request.Builder()
                     .url(DOWNLINK_URL)
@@ -25,7 +34,7 @@ class DownlinkRepositoryDataSource @Inject constructor(
                         throw IllegalStateException("Downlink fetch failed: HTTP ${response.code}")
                     }
                     val html = response.body.string()
-                    parser.parse(html, heroes)
+                    parser.parse(html, heroes).also(cache::write)
                 }
             }
         }

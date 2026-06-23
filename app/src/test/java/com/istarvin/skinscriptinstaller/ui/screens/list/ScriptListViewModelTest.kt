@@ -74,7 +74,7 @@ class ScriptListViewModelTest {
         every { repository.getLatestInstallations(any<Int>()) } returns flowOf(emptyList())
         coEvery { repository.getAllHeroesOnce() } returns emptyList()
         coEvery { fetchHeroCatalogUseCase.execute() } returns Result.success(0)
-        coEvery { downlinkRepositoryDataSource.fetchScripts(any()) } returns Result.success(emptyList())
+        coEvery { downlinkRepositoryDataSource.fetchScripts(any(), any()) } returns Result.success(emptyList())
 
         userSelectionManager = UserSelectionManager(activeUserStore, shizukuManager)
     }
