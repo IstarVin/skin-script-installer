@@ -19,12 +19,14 @@ lifecycleViewmodelCompose = "2.10.0"
 documentfile = "1.1.0"
 zip4j = "2.11.6"
 googleFonts = "1.10.6"
-mockk = "1.14.9"
+mockk = "1.14.11"
 kotlinx-coroutines-test = "1.10.2"
 turbine = "1.2.1"
 robolectric = "4.16.1"
 androidx-test-core = "1.7.0"
 retrofit = "3.0.0"
+okhttp = "5.4.0"
+jsoup = "1.22.2"
 coil = "3.4.0"
 
 [libraries]
@@ -68,6 +70,8 @@ zip4j = { group = "net.lingala.zip4j", name = "zip4j", version.ref = "zip4j" }
 # Retrofit
 retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
 retrofit-converter-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 # Coil
 coil-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.ref = "coil" }
 coil-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
@@ -83,4 +87,3 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
-
