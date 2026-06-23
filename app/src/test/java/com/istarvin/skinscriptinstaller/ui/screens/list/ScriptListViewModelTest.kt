@@ -6,7 +6,9 @@ import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
+import com.istarvin.skinscriptinstaller.data.downlink.DownlinkRepositoryDataSource
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
+import com.istarvin.skinscriptinstaller.domain.DownloadDownlinkScriptUseCase
 import com.istarvin.skinscriptinstaller.data.user.ActiveUserStore
 import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
@@ -38,6 +40,8 @@ class ScriptListViewModelTest {
     private lateinit var reinstallReplacedScriptsUseCase: ReinstallReplacedScriptsUseCase
     private lateinit var fetchHeroCatalogUseCase: FetchHeroCatalogUseCase
     private lateinit var verifyInstalledScriptsUseCase: VerifyInstalledScriptsUseCase
+    private lateinit var downlinkRepositoryDataSource: DownlinkRepositoryDataSource
+    private lateinit var downloadDownlinkScriptUseCase: DownloadDownlinkScriptUseCase
     private lateinit var activeUserStore: ActiveUserStore
     private lateinit var shizukuManager: ShizukuManager
     private lateinit var userSelectionManager: UserSelectionManager
@@ -58,6 +62,8 @@ class ScriptListViewModelTest {
         reinstallReplacedScriptsUseCase = mockk(relaxed = true)
         fetchHeroCatalogUseCase = mockk(relaxed = true)
         verifyInstalledScriptsUseCase = mockk(relaxed = true)
+        downlinkRepositoryDataSource = mockk(relaxed = true)
+        downloadDownlinkScriptUseCase = mockk(relaxed = true)
         activeUserStore = mockk(relaxed = true)
         shizukuManager = mockk(relaxed = true)
 
@@ -66,7 +72,9 @@ class ScriptListViewModelTest {
         every { repository.getAllScripts() } returns flowOf(emptyList())
         every { repository.getAllHeroes() } returns flowOf(emptyList())
         every { repository.getLatestInstallations(any<Int>()) } returns flowOf(emptyList())
+        coEvery { repository.getAllHeroesOnce() } returns emptyList()
         coEvery { fetchHeroCatalogUseCase.execute() } returns Result.success(0)
+        coEvery { downlinkRepositoryDataSource.fetchScripts(any()) } returns Result.success(emptyList())
 
         userSelectionManager = UserSelectionManager(activeUserStore, shizukuManager)
     }
@@ -84,7 +92,9 @@ class ScriptListViewModelTest {
             reinstallReplacedScriptsUseCase,
             userSelectionManager,
             fetchHeroCatalogUseCase,
-            verifyInstalledScriptsUseCase
+            verifyInstalledScriptsUseCase,
+            downlinkRepositoryDataSource,
+            downloadDownlinkScriptUseCase
         )
     }
 
@@ -154,9 +164,9 @@ class ScriptListViewModelTest {
         assertTrue(result.all { !it.isExpanded })
         assertTrue(result.all { !it.hasInstalledScript })
         assertTrue(result.all { !it.hasReplacedScript })
-        assertEquals(listOf(1L), result[0].skinReplacementSections.single().scripts.map { it.script.id })
-        assertEquals(listOf(2L), result[1].skinReplacementSections.single().scripts.map { it.script.id })
-        assertEquals(listOf(3L), result[2].flatScripts.map { it.script.id })
+        assertEquals(listOf(1L), result[0].skinReplacementSections.single().scripts.map { (it as ScriptListItem.Local).value.script.id })
+        assertEquals(listOf(2L), result[1].skinReplacementSections.single().scripts.map { (it as ScriptListItem.Local).value.script.id })
+        assertEquals(listOf(3L), result[2].flatScripts.map { (it as ScriptListItem.Local).value.script.id })
 
         collectJob.cancel()
     }

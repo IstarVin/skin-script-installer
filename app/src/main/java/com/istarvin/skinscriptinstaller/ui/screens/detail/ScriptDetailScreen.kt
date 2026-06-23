@@ -105,6 +105,9 @@ fun ScriptDetailScreen(
     val allHeroes by viewModel.allHeroes.collectAsState()
     val skinsForSelectedHero by viewModel.skinsForSelectedHero.collectAsState()
     val suggestedHeroName by viewModel.suggestedHeroName.collectAsState()
+    val hasCompleteClassification = heroName != null &&
+        originalSkinName != null &&
+        replacementSkinName != null
 
     var showClassifyDialog by rememberSaveable { mutableStateOf(false) }
     var pendingAutoClassify by rememberSaveable(autoClassify) { mutableStateOf(autoClassify) }
@@ -295,15 +298,16 @@ fun ScriptDetailScreen(
                     }
                 }
 
-                // Classification card
-                item {
-                    ClassificationCard(
-                        heroName = heroName,
-                        originalSkinName = originalSkinName,
-                        replacementSkinName = replacementSkinName,
-                        onEditClick = { showClassifyDialog = true },
-                        onClearClick = { viewModel.clearClassification() }
-                    )
+                if (!hasCompleteClassification) {
+                    item {
+                        ClassificationCard(
+                            heroName = heroName,
+                            originalSkinName = originalSkinName,
+                            replacementSkinName = replacementSkinName,
+                            onEditClick = { showClassifyDialog = true },
+                            onClearClick = { viewModel.clearClassification() }
+                        )
+                    }
                 }
 
                 // Action buttons

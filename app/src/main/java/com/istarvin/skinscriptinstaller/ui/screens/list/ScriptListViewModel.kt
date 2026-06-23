@@ -7,7 +7,10 @@ import com.istarvin.skinscriptinstaller.data.db.entity.Hero
 import com.istarvin.skinscriptinstaller.data.db.entity.Installation
 import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
 import com.istarvin.skinscriptinstaller.data.db.entity.SkinScript
+import com.istarvin.skinscriptinstaller.data.downlink.DownlinkRepositoryDataSource
+import com.istarvin.skinscriptinstaller.data.downlink.DownlinkRepositoryEntry
 import com.istarvin.skinscriptinstaller.data.repository.ScriptRepository
+import com.istarvin.skinscriptinstaller.domain.DownloadDownlinkScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.FetchHeroCatalogUseCase
 import com.istarvin.skinscriptinstaller.domain.ImportScriptUseCase
 import com.istarvin.skinscriptinstaller.domain.ReinstallReplacedScriptsResult
@@ -48,6 +51,39 @@ data class ScriptWithStatus(
         get() = heroName != null
 }
 
+sealed interface ScriptListItem {
+    val key: String
+    val heroName: String?
+    val heroIcon: String?
+    val originalSkinName: String?
+    val replacementSkinName: String?
+    val status: String
+    val isClassified: Boolean
+
+    data class Local(val value: ScriptWithStatus) : ScriptListItem {
+        override val key: String = "local:${value.script.id}"
+        override val heroName: String? = value.heroName
+        override val heroIcon: String? = value.heroIcon
+        override val originalSkinName: String? = value.originalSkinName
+        override val replacementSkinName: String? = value.replacementSkinName
+        override val status: String = value.status
+        override val isClassified: Boolean = value.isClassified
+    }
+
+    data class Remote(
+        val entry: DownlinkRepositoryEntry,
+        val isDownloading: Boolean = false
+    ) : ScriptListItem {
+        override val key: String = "remote:${entry.id}"
+        override val heroName: String = entry.heroName
+        override val heroIcon: String? = entry.heroIcon
+        override val originalSkinName: String = entry.originalSkinName
+        override val replacementSkinName: String = entry.replacementSkinName
+        override val status: String = InstallationStatus.NOT_INSTALLED
+        override val isClassified: Boolean = true
+    }
+}
+
 data class ZipPasswordPrompt(
     val zipUri: Uri,
     val errorMessage: String? = null
@@ -56,7 +92,7 @@ data class ZipPasswordPrompt(
 data class SkinReplacementGroup(
     val key: String,
     val title: String,
-    val scripts: List<ScriptWithStatus>
+    val scripts: List<ScriptListItem>
 ) {
     val count: Int
         get() = scripts.size
@@ -65,7 +101,7 @@ data class SkinReplacementGroup(
 data class SkinReplacementSection(
     val key: String,
     val title: String,
-    val scripts: List<ScriptWithStatus>,
+    val scripts: List<ScriptListItem>,
     val isExpanded: Boolean
 ) {
     val count: Int
@@ -77,7 +113,7 @@ data class HeroScriptGroup(
     val title: String,
     val heroIcon: String? = null,
     val skinReplacementGroups: List<SkinReplacementGroup> = emptyList(),
-    val flatScripts: List<ScriptWithStatus> = emptyList(),
+    val flatScripts: List<ScriptListItem> = emptyList(),
     val isFlat: Boolean = false,
     val hasInstalledScript: Boolean = false,
     val hasReplacedScript: Boolean = false
@@ -91,7 +127,7 @@ data class HeroScriptSection(
     val title: String,
     val heroIcon: String? = null,
     val skinReplacementSections: List<SkinReplacementSection> = emptyList(),
-    val flatScripts: List<ScriptWithStatus> = emptyList(),
+    val flatScripts: List<ScriptListItem> = emptyList(),
     val isFlat: Boolean = false,
     val hasInstalledScript: Boolean = false,
     val hasReplacedScript: Boolean = false,
@@ -110,7 +146,9 @@ class ScriptListViewModel @Inject constructor(
     private val reinstallReplacedScriptsUseCase: ReinstallReplacedScriptsUseCase,
     private val userSelectionManager: UserSelectionManager,
     private val fetchHeroCatalogUseCase: FetchHeroCatalogUseCase,
-    private val verifyInstalledScriptsUseCase: VerifyInstalledScriptsUseCase
+    private val verifyInstalledScriptsUseCase: VerifyInstalledScriptsUseCase,
+    private val downlinkRepositoryDataSource: DownlinkRepositoryDataSource,
+    private val downloadDownlinkScriptUseCase: DownloadDownlinkScriptUseCase
 ) : ViewModel() {
 
     private var didInitializeExpandedSections = false
@@ -130,6 +168,12 @@ class ScriptListViewModel @Inject constructor(
 
     private val heroes: StateFlow<List<Hero>> = repository.getAllHeroes()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _downlinkEntries = MutableStateFlow<List<DownlinkRepositoryEntry>>(emptyList())
+    private val _downlinkError = MutableStateFlow<String?>(null)
+    val downlinkError: StateFlow<String?> = _downlinkError.asStateFlow()
+
+    private val _downloadingDownlinkIds = MutableStateFlow<Set<String>>(emptySet())
 
     val scriptsWithStatus: StateFlow<List<ScriptWithStatus>> = activeUserId
         .flatMapLatest { selectedUserId ->
@@ -167,7 +211,25 @@ class ScriptListViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    val heroScriptGroups: StateFlow<List<HeroScriptGroup>> = scriptsWithStatus
+    private val scriptListItems: StateFlow<List<ScriptListItem>> = combine(
+        scriptsWithStatus,
+        _downlinkEntries,
+        _downloadingDownlinkIds
+    ) { localScripts, downlinkEntries, downloadingIds ->
+        val localItems = localScripts.map { ScriptListItem.Local(it) }
+        val localKeys = localScripts.mapNotNull { it.classificationKey() }.toSet()
+        val remoteItems = downlinkEntries
+            .filterNot { it.classificationKey() in localKeys }
+            .map { entry ->
+                ScriptListItem.Remote(
+                    entry = entry,
+                    isDownloading = entry.id in downloadingIds
+                )
+            }
+        localItems + remoteItems
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val heroScriptGroups: StateFlow<List<HeroScriptGroup>> = scriptListItems
         .map(::buildHeroScriptGroups)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -246,6 +308,9 @@ class ScriptListViewModel @Inject constructor(
     private val _pendingClassificationScriptId = MutableStateFlow<Long?>(null)
     val pendingClassificationScriptId: StateFlow<Long?> = _pendingClassificationScriptId.asStateFlow()
 
+    private val _pendingOpenScriptId = MutableStateFlow<Long?>(null)
+    val pendingOpenScriptId: StateFlow<Long?> = _pendingOpenScriptId.asStateFlow()
+
     init {
         userSelectionManager.observeFileService(viewModelScope)
         observeHeroSections()
@@ -253,6 +318,7 @@ class ScriptListViewModel @Inject constructor(
             if (repository.getHeroCount() == 0) {
                 fetchHeroCatalogUseCase.execute()
             }
+            fetchDownlinkScripts()
         }
     }
 
@@ -331,8 +397,30 @@ class ScriptListViewModel @Inject constructor(
             _isRefreshing.value = true
             try {
                 verifyInstalledScriptsUseCase.execute()
+                fetchDownlinkScripts()
             } finally {
                 _isRefreshing.value = false
+            }
+        }
+    }
+
+    fun downloadDownlinkScript(entry: DownlinkRepositoryEntry) {
+        if (entry.id in _downloadingDownlinkIds.value) {
+            return
+        }
+
+        viewModelScope.launch {
+            _importError.value = null
+            _downloadingDownlinkIds.value = _downloadingDownlinkIds.value + entry.id
+            try {
+                val result = downloadDownlinkScriptUseCase.execute(entry)
+                result.onSuccess { script ->
+                    _pendingOpenScriptId.value = script.id
+                }.onFailure { error ->
+                    _importError.value = error.message ?: "Downlink download failed"
+                }
+            } finally {
+                _downloadingDownlinkIds.value = _downloadingDownlinkIds.value - entry.id
             }
         }
     }
@@ -376,6 +464,25 @@ class ScriptListViewModel @Inject constructor(
 
     fun clearReinstallReplacedMessage() {
         _reinstallReplacedMessage.value = null
+    }
+
+    fun clearDownlinkError() {
+        _downlinkError.value = null
+    }
+
+    private suspend fun fetchDownlinkScripts() {
+        val heroList = heroes.value.ifEmpty { repository.getAllHeroesOnce() }
+        if (heroList.isEmpty()) {
+            return
+        }
+
+        val result = downlinkRepositoryDataSource.fetchScripts(heroList)
+        result.onSuccess { entries ->
+            _downlinkEntries.value = entries
+            _downlinkError.value = null
+        }.onFailure { error ->
+            _downlinkError.value = error.message ?: "Failed to fetch Downlink repository"
+        }
     }
 
     private fun importZipInternal(zipUri: Uri, password: CharArray?) {
@@ -452,6 +559,10 @@ class ScriptListViewModel @Inject constructor(
         _pendingClassificationScriptId.value = null
     }
 
+    fun dismissPendingOpenScript() {
+        _pendingOpenScriptId.value = null
+    }
+
     private fun formatReinstallReplacedMessage(
         result: ReinstallReplacedScriptsResult,
         userId: Int
@@ -470,7 +581,7 @@ class ScriptListViewModel @Inject constructor(
         return "Reinstalled ${result.reinstalledCount} of ${result.totalCandidates} scripts for User $userId. Failed: $failureSummary"
     }
 
-    private fun buildHeroScriptGroups(items: List<ScriptWithStatus>): List<HeroScriptGroup> {
+    private fun buildHeroScriptGroups(items: List<ScriptListItem>): List<HeroScriptGroup> {
         if (items.isEmpty()) {
             return emptyList()
         }
@@ -519,5 +630,21 @@ class ScriptListViewModel @Inject constructor(
                 }
             }
     }
+
+    private fun ScriptWithStatus.classificationKey(): String? {
+        val hero = heroName ?: return null
+        val original = originalSkinName ?: return null
+        val replacement = replacementSkinName ?: return null
+        return classificationKey(hero, original, replacement)
+    }
+
+    private fun DownlinkRepositoryEntry.classificationKey(): String =
+        classificationKey(heroName, originalSkinName, replacementSkinName)
+
+    private fun classificationKey(hero: String, original: String, replacement: String): String =
+        listOf(hero, original, replacement)
+            .joinToString("|") { value ->
+                value.trim().lowercase().replace(Regex("\\s+"), " ")
+            }
 
 }

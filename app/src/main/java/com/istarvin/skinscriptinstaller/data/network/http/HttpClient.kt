@@ -48,6 +48,7 @@ class HttpClient @Inject constructor(
                 body = response.body.string(),
                 contentType = response.body.contentType()?.toString(),
                 headers = response.headers.toMap(),
+                setCookieHeaders = response.headers.values("Set-Cookie"),
                 url = response.request.url.toString(),
             )
         }
@@ -60,6 +61,7 @@ data class HttpResponse(
     val body: String,
     val contentType: String?,
     val headers: Map<String, String>,
+    val setCookieHeaders: List<String>,
     val url: String,
 ) {
     val isSuccessful: Boolean = code in 200..299

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -76,6 +77,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil3.compose.AsyncImage
 import com.istarvin.skinscriptinstaller.data.db.entity.InstallationStatus
+import com.istarvin.skinscriptinstaller.data.downlink.DownlinkRepositoryEntry
 import com.istarvin.skinscriptinstaller.ui.components.AppEmptyState
 import com.istarvin.skinscriptinstaller.ui.components.CollapsibleSection
 import com.istarvin.skinscriptinstaller.ui.components.DeleteScriptDialog
@@ -105,8 +107,10 @@ fun ScriptListScreen(
     val isReinstallingReplaced by viewModel.isReinstallingReplaced.collectAsState()
     val reinstallReplacedMessage by viewModel.reinstallReplacedMessage.collectAsState()
     val importError by viewModel.importError.collectAsState()
+    val downlinkError by viewModel.downlinkError.collectAsState()
     val zipPasswordPrompt by viewModel.zipPasswordPrompt.collectAsState()
     val pendingClassificationScriptId by viewModel.pendingClassificationScriptId.collectAsState()
+    val pendingOpenScriptId by viewModel.pendingOpenScriptId.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
     var scriptToDelete by remember { mutableStateOf<ScriptWithStatus?>(null) }
@@ -141,6 +145,13 @@ fun ScriptListScreen(
         }
     }
 
+    LaunchedEffect(downlinkError) {
+        downlinkError?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearDownlinkError()
+        }
+    }
+
     LaunchedEffect(reinstallReplacedMessage) {
         reinstallReplacedMessage?.let {
             snackbarHostState.showSnackbar(it)
@@ -152,6 +163,13 @@ fun ScriptListScreen(
         pendingClassificationScriptId?.let { scriptId ->
             viewModel.dismissPendingClassification()
             onScriptClickAutoClassify(scriptId)
+        }
+    }
+
+    LaunchedEffect(pendingOpenScriptId) {
+        pendingOpenScriptId?.let { scriptId ->
+            viewModel.dismissPendingOpenScript()
+            onScriptClick(scriptId)
         }
     }
 
@@ -312,7 +330,8 @@ fun ScriptListScreen(
                                 section = section,
                                 onToggle = viewModel::toggleSection,
                                 onScriptClick = onScriptClick,
-                                onDeleteClick = { scriptToDelete = it }
+                                onDeleteClick = { scriptToDelete = it },
+                                onDownloadClick = viewModel::downloadDownlinkScript
                             )
                         }
                     }
@@ -588,16 +607,20 @@ private fun userLabel(userId: Int): String {
 
 @Composable
 private fun ScriptCard(
-    item: ScriptWithStatus,
+    item: ScriptListItem,
     modifier: Modifier = Modifier,
     showHeroName: Boolean = true,
-    onClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onScriptClick: (Long) -> Unit,
+    onDeleteClick: (ScriptWithStatus) -> Unit,
+    onDownloadClick: (DownlinkRepositoryEntry) -> Unit
 ) {
+    val isLocal = item is ScriptListItem.Local
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(enabled = isLocal) {
+                onScriptClick((item as ScriptListItem.Local).value.script.id)
+            },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
@@ -612,7 +635,10 @@ private fun ScriptCard(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.script.name,
+                    text = when (item) {
+                        is ScriptListItem.Local -> item.value.script.name
+                        is ScriptListItem.Remote -> item.entry.title
+                    },
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
@@ -642,14 +668,24 @@ private fun ScriptCard(
 
             Spacer(modifier = Modifier.width(AppDimens.SpaceSm))
 
-            InstallStatusChip(status = item.status)
+            when (item) {
+                is ScriptListItem.Local -> {
+                    InstallStatusChip(status = item.status)
+                    IconButton(onClick = { onDeleteClick(item.value) }) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
 
-            IconButton(onClick = onDeleteClick) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.outline
-                )
+                is ScriptListItem.Remote -> {
+                    DownlinkDownloadButton(
+                        isDownloading = item.isDownloading,
+                        onClick = { onDownloadClick(item.entry) }
+                    )
+                }
             }
         }
     }
@@ -660,7 +696,8 @@ private fun HeroScriptAccordionSection(
     section: HeroScriptSection,
     onToggle: (String) -> Unit,
     onScriptClick: (Long) -> Unit,
-    onDeleteClick: (ScriptWithStatus) -> Unit
+    onDeleteClick: (ScriptWithStatus) -> Unit,
+    onDownloadClick: (DownlinkRepositoryEntry) -> Unit
 ) {
     val subtitle = if (section.count == 1) "1 skin script" else "${section.count} skin scripts"
 
@@ -697,8 +734,9 @@ private fun HeroScriptAccordionSection(
                     item = item,
                     modifier = Modifier.padding(start = AppDimens.SpaceSm),
                     showHeroName = false,
-                    onClick = { onScriptClick(item.script.id) },
-                    onDeleteClick = { onDeleteClick(item) }
+                    onScriptClick = onScriptClick,
+                    onDeleteClick = onDeleteClick,
+                    onDownloadClick = onDownloadClick
                 )
             }
         } else {
@@ -707,7 +745,8 @@ private fun HeroScriptAccordionSection(
                     section = replSection,
                     onToggle = onToggle,
                     onScriptClick = onScriptClick,
-                    onDeleteClick = onDeleteClick
+                    onDeleteClick = onDeleteClick,
+                    onDownloadClick = onDownloadClick
                 )
             }
         }
@@ -822,7 +861,8 @@ private fun SkinReplacementAccordionSection(
     section: SkinReplacementSection,
     onToggle: (String) -> Unit,
     onScriptClick: (Long) -> Unit,
-    onDeleteClick: (ScriptWithStatus) -> Unit
+    onDeleteClick: (ScriptWithStatus) -> Unit,
+    onDownloadClick: (DownlinkRepositoryEntry) -> Unit
 ) {
     val subtitle = if (section.count == 1) "1 skin script" else "${section.count} skin scripts"
 
@@ -845,8 +885,9 @@ private fun SkinReplacementAccordionSection(
         section.scripts.forEach { item ->
             OldSkinItem(
                 item = item,
-                onClick = { onScriptClick(item.script.id) },
-                onDeleteClick = { onDeleteClick(item) }
+                onScriptClick = onScriptClick,
+                onDeleteClick = onDeleteClick,
+                onDownloadClick = onDownloadClick
             )
         }
     }
@@ -854,14 +895,18 @@ private fun SkinReplacementAccordionSection(
 
 @Composable
 private fun OldSkinItem(
-    item: ScriptWithStatus,
-    onClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    item: ScriptListItem,
+    onScriptClick: (Long) -> Unit,
+    onDeleteClick: (ScriptWithStatus) -> Unit,
+    onDownloadClick: (DownlinkRepositoryEntry) -> Unit
 ) {
+    val isLocal = item is ScriptListItem.Local
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(enabled = isLocal) {
+                onScriptClick((item as ScriptListItem.Local).value.script.id)
+            },
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface
         ),
@@ -883,15 +928,56 @@ private fun OldSkinItem(
 
             Spacer(modifier = Modifier.width(AppDimens.SpaceSm))
 
-            InstallStatusChip(status = item.status)
+            when (item) {
+                is ScriptListItem.Local -> {
+                    InstallStatusChip(status = item.status)
+                    IconButton(onClick = { onDeleteClick(item.value) }) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "Delete",
+                            tint = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
 
-            IconButton(onClick = onDeleteClick) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = "Delete",
-                    tint = MaterialTheme.colorScheme.outline
-                )
+                is ScriptListItem.Remote -> {
+                    DownlinkDownloadButton(
+                        isDownloading = item.isDownloading,
+                        onClick = { onDownloadClick(item.entry) }
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun DownlinkDownloadButton(
+    isDownloading: Boolean,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        enabled = !isDownloading,
+        contentPadding = PaddingValues(
+            horizontal = AppDimens.SpaceMd,
+            vertical = AppDimens.SpaceSm
+        )
+    ) {
+        if (isDownloading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(AppDimens.IconSmall),
+                color = MaterialTheme.colorScheme.onPrimary,
+                strokeWidth = 2.dp
+            )
+        } else {
+            Icon(
+                Icons.Default.Download,
+                contentDescription = null,
+                modifier = Modifier.size(AppDimens.IconSmall)
+            )
+            Spacer(modifier = Modifier.width(AppDimens.SpaceXs))
+            Text("Download")
         }
     }
 }
